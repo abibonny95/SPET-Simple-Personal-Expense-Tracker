@@ -59,6 +59,10 @@ The flip side: **data lives in your browser's storage**. Clearing the site's dat
 
 After the first load the app works without a connection.
 
+## Credits
+
+The "SPET" lettering in the app header is drawn from outlines of the [Outfit](https://github.com/Outfitio/Outfit-Fonts) typeface, © The Outfit Project Authors, used under the SIL Open Font License 1.1 (see `OFL-Outfit.txt`). It is embedded as inline SVG, so the app loads no web fonts.
+
 ## Disclaimer
 
 SPET is a personal bookkeeping tool, not financial advice. It is provided as is, without warranty of any kind.
