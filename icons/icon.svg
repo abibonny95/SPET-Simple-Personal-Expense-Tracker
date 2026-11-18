@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <title>SPET</title>
+  <rect width="512" height="512" rx="112" fill="#4338ca"/>
+  <g fill="none" stroke-width="64" transform="rotate(-90 256 256)">
+    <circle cx="256" cy="256" r="120" stroke="#ffffff" stroke-dasharray="329 425" stroke-dashoffset="0"/>
+    <circle cx="256" cy="256" r="120" stroke="#c7d2fe" stroke-dasharray="216 538" stroke-dashoffset="-339"/>
+    <circle cx="256" cy="256" r="120" stroke="#fbbf24" stroke-dasharray="178 576" stroke-dashoffset="-565"/>
+  </g>
+</svg>
