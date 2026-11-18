@@ -133,9 +133,14 @@ button:focus-visible, input:focus-visible, [role="button"]:focus-visible {
 
 .brand {
   margin: 0;
-  font-size: 20px;
-  letter-spacing: -.2px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--text);
+  line-height: 1;
 }
+.brand-mark { width: 32px; height: 32px; flex: none; }
+.brand-word { height: 17px; width: auto; flex: none; }
 
 .top-actions { display: flex; align-items: center; gap: 8px; }
 
@@ -702,7 +707,9 @@ body.no-actions .actions { display: none; }
 @media (max-width: 360px) {
   .big { font-size: 24px; }
   .act { font-size: 12px; }
-  .brand { font-size: 18px; }
+  .brand { gap: 7px; }
+  .brand-mark { width: 28px; height: 28px; }
+  .brand-word { height: 15px; }
   .seg-mini button { padding: 0 10px; }
 }
 
