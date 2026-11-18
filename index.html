@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="it" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>SPET</title>
+  <meta name="description" content="Tracker semplice delle spese personali. Offline, gratuito, senza server.">
+  <meta name="theme-color" content="#f4f6fb">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="SPET">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <!-- Imposta il tema prima del primo disegno per evitare il lampo bianco. -->
+  <script>
+    (function () {
+      try {
+        var raw = localStorage.getItem('spet:data') || localStorage.getItem('wealthtrack:data');
+        var st = raw ? (JSON.parse(raw).settings || {}) : {};
+        var theme = st.theme || 'auto';
+        document.documentElement.setAttribute('lang', st.lang === 'en' ? 'en' : 'it');
+        var dark = theme === 'dark' || ((theme === 'auto' || !theme) && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
+        document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+      } catch (e) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div class="topbar-row">
+        <h1 class="brand">SPET</h1>
+        <div class="top-actions">
+          <div class="seg-mini" id="mode-switch" role="group" aria-label="Periodo" data-i18n-aria="Periodo">
+            <button type="button" data-action="mode" data-mode="month" data-i18n="Mese">Mese</button>
+            <button type="button" data-action="mode" data-mode="year" data-i18n="Anno">Anno</button>
+          </div>
+          <button type="button" class="icon-btn" id="theme-btn" data-action="theme-toggle" aria-label="Cambia tema" data-i18n-aria="Cambia tema">🌙</button>
+        </div>
+      </div>
+      <div class="period-nav" id="period-nav">
+        <button type="button" class="icon-btn" data-action="nav" data-delta="-1" aria-label="Periodo precedente" data-i18n-aria="Periodo precedente">‹</button>
+        <button type="button" class="period-label" id="period-label" data-action="today" aria-label="Torna al periodo corrente" data-i18n-aria="Torna al periodo corrente"></button>
+        <button type="button" class="icon-btn" data-action="nav" data-delta="1" aria-label="Periodo successivo" data-i18n-aria="Periodo successivo">›</button>
+      </div>
+    </header>
+
+    <main id="view" tabindex="-1"></main>
+
+    <div class="actions" id="actions">
+      <button type="button" class="act income" data-action="new-tx" data-type="income" data-i18n="+ Entrata">+ Entrata</button>
+      <button type="button" class="act expense" data-action="new-tx" data-type="expense" data-i18n="− Spesa">− Spesa</button>
+      <button type="button" class="act saving" data-action="new-tx" data-type="saving" data-i18n="+ Investi/Accantona">+ Investi/Accantona</button>
+    </div>
+
+    <nav class="tabbar" aria-label="Navigazione" data-i18n-aria="Navigazione">
+      <button type="button" class="tab" data-action="tab" data-tab="home"><span class="ti" aria-hidden="true">🏠</span><span data-i18n="Home">Home</span></button>
+      <button type="button" class="tab" data-action="tab" data-tab="list"><span class="ti" aria-hidden="true">🧾</span><span data-i18n="Movimenti">Movimenti</span></button>
+      <button type="button" class="tab" data-action="tab" data-tab="cats"><span class="ti" aria-hidden="true">🏷️</span><span data-i18n="Categorie">Categorie</span></button>
+      <button type="button" class="tab" data-action="tab" data-tab="settings"><span class="ti" aria-hidden="true">⚙️</span><span data-i18n="Impostazioni">Impostazioni</span></button>
+    </nav>
+  </div>
+
+  <div id="toasts" aria-live="polite"></div>
+  <div id="sheet-root"></div>
+  <input type="file" id="import-file" accept="application/json,.json" hidden>
+
+  <noscript><p style="padding:24px;font-family:sans-serif">SPET richiede JavaScript attivo. / SPET requires JavaScript.</p></noscript>
+  <script src="app.js"></script>
+</body>
+</html>
