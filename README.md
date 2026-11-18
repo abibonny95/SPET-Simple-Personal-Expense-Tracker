@@ -16,6 +16,14 @@ SPET is a Progressive Web App (PWA) built with plain HTML, CSS and JavaScript. T
   - **Income** — salary, refunds, extra income.
   - **Allocations** — money moved to your own destinations (savings account, pension fund, ETFs/investments, or any destination you create).
 
+**Accounts, funds and wealth overview**
+- A checking account with an optional opening balance, updated by every income and outflow.
+- Each allocation destination is a fund with its own balance and opening balance. Mark a fund as "can pay expenses" (for example a "Fixed costs" fund fed with 50 per month).
+- When you add an expense, choose the payment source. An expense paid from a fund lowers that fund, not the checking account, and stays out of the month's Expenses and Net balance.
+- Any account or fund can go below zero. You get a warning when it happens, and the overview shows it in red, so you can see whether what you set aside covers the year.
+- Moving money between the account and funds (or fund to fund) never changes total wealth.
+- The Overview tab shows total wealth, the account and every fund. The monthly donut stays on Home.
+
 **Budgets with alerts**
 - Optional monthly limit for each expense category.
 - Progress bar per category: green below 80%, orange from 80% to 99%, red at 100% or more.
