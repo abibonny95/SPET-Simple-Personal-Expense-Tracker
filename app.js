@@ -1,4 +1,4 @@
-/* SPET 1.3.0 - Simple Personal Expense Tracker
+/* SPET 1.4.0 - Simple Personal Expense Tracker
  * App a pagina singola. Nessuna dipendenza, nessun server.
  * Dati in localStorage, importi in centesimi interi, date come YYYY-MM-DD locali. */
 (function () {
@@ -6,14 +6,14 @@
 
   // ---------------------------------------------------------------- costanti
 
-  var APP_VERSION = '1.3.0';
+  var APP_VERSION = '1.4.0';
   var STORAGE_KEY = 'spet:data';
   var LEGACY_KEY = 'wealthtrack:data'; // nome della prima versione: serve solo a migrare i dati
-  var DB_VERSION = 2;
+  var DB_VERSION = 3;
   // Destinazioni predefinite: non pagano spese finche l utente non lo sceglie.
   var LOCKED_SYS = ['deposit', 'pension', 'etf'];
   var MONTHS_SHORT = { it: ['G', 'F', 'M', 'A', 'M', 'G', 'L', 'A', 'S', 'O', 'N', 'D'], en: ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'] };
-  var TYPE_LABEL = { expense: 'Spesa', income: 'Entrata', saving: 'Accantonamento' };
+  var TYPE_LABEL = { expense: 'Spesa', income: 'Entrata', saving: 'Trasferimento' };
   var NONE_REF = { id: '__none', name: 'Eliminata', icon: '❔', color: '#94a3b8' };
   var COLORS = ['#ef4444', '#f97316', '#f59e0b', '#eab308', '#84cc16', '#22c55e', '#14b8a6',
     '#06b6d4', '#3b82f6', '#6366f1', '#8b5cf6', '#d946ef', '#ec4899', '#64748b',
@@ -116,7 +116,7 @@
     'Eliminata.': 'Deleted.',
     // backup, csv, import
     'Backup pronto.': 'Backup ready.', 'tutto': 'all', 'Report CSV pronto.': 'CSV report ready.',
-    'Data;Tipo;Categoria o destinazione;Importo EUR;Note;Fonte': 'Date;Type;Category or destination;Amount EUR;Notes;Source',
+    'Data;Tipo;Categoria o destinazione;Importo EUR;Note;Conto o fondo': 'Date;Type;Category or destination;Amount EUR;Notes;Account or fund',
     'Totale entrate': 'Total income', 'Totale spese': 'Total expenses', 'Totale accantonato': 'Total allocated',
     '  di cui {n}': '  of which {n}', 'Risparmio totale (Entrate - Spese)': 'Total savings (Income - Expenses)',
     'Saldo netto (Entrate - Spese - Accantonamenti)': 'Net balance (Income - Expenses - Allocations)',
@@ -141,7 +141,18 @@
     'Non incidono su Spese e Saldo netto del periodo.': 'They do not affect Expenses and Net balance for the period.',
     '⚠️ {name}: saldo in negativo ({b}).': '⚠️ {name}: balance below zero ({b}).',
     'Colore personalizzato': 'Custom color', 'Totale spese pagate da fondi': 'Total expenses paid from funds',
-    'Il saldo del fondo ({b}) non verrà più conteggiato nel patrimonio.': 'The balance of this fund ({b}) will no longer count towards your wealth.'
+    'Il saldo di “{n}” ({b}) non verrà più conteggiato nel patrimonio.': 'The balance of “{n}” ({b}) will no longer count towards your wealth.',
+    // v1.4: piu conti, trasferimenti ovunque, destinazione delle entrate, data del saldo iniziale
+    'Trasferimento': 'Transfer', 'Trasferimenti': 'Transfers', 'Modifica trasferimento': 'Edit transfer',
+    'Nuovo trasferimento': 'New transfer', 'Trasferimento aggiunto: {m}': 'Transfer added: {m}',
+    'Conti': 'Accounts', 'Nuovo conto': 'New account', '+ Aggiungi conto': '+ Add account',
+    'Versato su': 'Paid into', 'su {n}': 'to {n}',
+    'Data del saldo iniziale (facoltativa)': 'Opening balance date (optional)',
+    'Le entrate e le uscite fino a questa data (inclusa) sono già nel saldo e non vengono contate.': 'Income and outflows up to this date (included) are already in the balance and are not counted.',
+    'La data non è valida.': 'The date is not valid.',
+    ' Il movimento collegato non incide più sui saldi.': ' The linked transaction no longer affects balances.',
+    ' I {u} movimenti collegati non incidono più sui saldi.': ' The {u} linked transactions no longer affect balances.',
+    'Nessun altro conto o fondo. Aggiungine uno dal tab Sintesi.': 'No other account or fund. Add one from the Overview tab.'
   };
 
   // Nomi delle voci predefinite: restano tradotti finche l'utente non li rinomina.
@@ -156,9 +167,9 @@
     etf: { k: 'saving', it: 'ETF/Investimenti', en: 'ETF/Investments' },
     main: { k: 'account', it: 'Conto corrente', en: 'Checking account' }
   };
-  var ADDED = { expense: 'Spesa aggiunta: {m}', income: 'Entrata aggiunta: {m}', saving: 'Accantonamento aggiunto: {m}' };
-  var EDIT_TITLE = { expense: 'Modifica spesa', income: 'Modifica entrata', saving: 'Modifica accantonamento' };
-  var NEW_TITLE = { expense: 'Nuova spesa', income: 'Nuova entrata', saving: 'Nuovo accantonamento' };
+  var ADDED = { expense: 'Spesa aggiunta: {m}', income: 'Entrata aggiunta: {m}', saving: 'Trasferimento aggiunto: {m}' };
+  var EDIT_TITLE = { expense: 'Modifica spesa', income: 'Modifica entrata', saving: 'Modifica trasferimento' };
+  var NEW_TITLE = { expense: 'Nuova spesa', income: 'Nuova entrata', saving: 'Nuovo trasferimento' };
 
   function T(str, p) {
     var r = str;
@@ -362,16 +373,16 @@
     return { id: uid(), type: type, sys: sys, name: SYS[sys].it, icon: icon, color: color, limit: null };
   }
 
-  // Il conto corrente principale: e la fonte predefinita di ogni movimento.
+  // Il primo conto corrente: e il conto predefinito di ogni movimento.
   function makeAccount() {
-    return { sys: 'main', name: SYS.main.it, icon: '💳', color: '#4338ca', opening: 0 };
+    return { id: uid(), sys: 'main', name: SYS.main.it, icon: '💳', color: '#4338ca', opening: 0, openingDate: '' };
   }
 
   function defaultData() {
     return {
       version: DB_VERSION,
-      settings: { theme: 'auto', lang: 'it', lastBackup: '', backupSnooze: '', guideSeen: false },
-      account: makeAccount(),
+      settings: { theme: 'auto', lang: 'it', lastBackup: '', backupSnooze: '', guideSeen: false, lastWallet: { expense: '', income: '', saving: '' } },
+      accounts: [makeAccount()],
       categories: [
         makeCat('expense', 'home', '🏠', '#6366f1'),
         makeCat('expense', 'groceries', '🛒', '#22c55e'),
@@ -400,8 +411,10 @@
     var v = Number(raw.version);
     if (!isFinite(v) || v < 1) { throw new Error('Versione dati mancante.'); }
     if (v > DB_VERSION) { throw new Error('Il file viene da una versione più recente di SPET.'); }
-    // v1 -> v2: conto, saldi iniziali e fonte dei movimenti prendono i valori predefiniti qui sotto.
-    // Migrazioni future: if (v < 3) { ... }
+    // v1 -> v2: saldi iniziali e fonte dei movimenti prendono i valori predefiniti qui sotto.
+    // v2 -> v3: il conto unico raw.account diventa il primo di raw.accounts. I movimenti senza
+    // fonte passano da quel conto, e le entrate vi arrivano.
+    // Migrazioni future: if (v < 4) { ... }
 
     var refSeen = {}, txSeen = {};
     function refId(id) {
@@ -414,6 +427,22 @@
     function icon(i) { return Array.from(String(i || '')).slice(0, 4).join('') || '🏷️'; }
     function name(n) { return String(n || '').trim().slice(0, 30) || 'Senza nome'; }
     function cents(x) { var n = Math.round(Number(x)); return isFinite(n) && Math.abs(n) < 1e11 ? n : 0; }
+    function wid(x) { return typeof x === 'string' ? x.slice(0, 40) : ''; }
+    function odate(x) { return isValidISO(x) ? x : ''; }
+
+    var rawAcc = asArray(raw.accounts).filter(function (a) { return a && typeof a === 'object'; });
+    if (!rawAcc.length && raw.account && typeof raw.account === 'object') { rawAcc = [raw.account]; }
+    var hasMain = false;
+    var accounts = rawAcc.slice(0, 30).map(function (a) {
+      var o = { id: refId(a.id) };
+      if (a.sys === 'main' && !hasMain) { o.sys = 'main'; hasMain = true; }
+      o.name = name(a.name || (o.sys ? SYS.main.it : ''));
+      o.icon = icon(a.icon || '💳'); o.color = color(a.color || '#4338ca');
+      o.opening = cents(a.opening); o.openingDate = odate(a.openingDate);
+      return o;
+    });
+    if (!accounts.length) { accounts.push({ id: refId(), sys: 'main', name: SYS.main.it, icon: '💳', color: '#4338ca', opening: 0, openingDate: '' }); }
+    var defAcc = accounts[0].id;
 
     var categories = asArray(raw.categories).filter(function (c) {
       return c && (c.type === 'expense' || c.type === 'income');
@@ -432,7 +461,7 @@
       var sy = sysOf(d.sys, d.name, 'saving');
       if (sy) { o.sys = sy; }
       o.name = name(d.name); o.icon = icon(d.icon); o.color = color(d.color);
-      o.opening = cents(d.opening);
+      o.opening = cents(d.opening); o.openingDate = odate(d.openingDate);
       o.spendable = typeof d.spendable === 'boolean' ? d.spendable : LOCKED_SYS.indexOf(sy) < 0;
       return o;
     });
@@ -446,18 +475,14 @@
       return {
         id: id, type: t.type, amount: Math.round(Number(t.amount)),
         refId: typeof t.refId === 'string' ? t.refId : '', date: t.date,
-        src: t.type !== 'income' && typeof t.src === 'string' ? t.src.slice(0, 40) : '',
+        src: t.type !== 'income' ? (wid(t.src) || defAcc) : '',
+        dst: t.type === 'income' ? (wid(t.dst) || defAcc) : '',
         note: String(t.note || '').slice(0, 200), createdAt: Number(t.createdAt) || Date.now()
       };
     });
 
-    var ra = raw.account && typeof raw.account === 'object' ? raw.account : {};
-    var account = {
-      sys: 'main', name: name(ra.name || SYS.main.it), icon: icon(ra.icon || '💳'),
-      color: color(ra.color || '#4338ca'), opening: cents(ra.opening)
-    };
-
     var st = raw.settings && typeof raw.settings === 'object' ? raw.settings : {};
+    var lw = st.lastWallet && typeof st.lastWallet === 'object' ? st.lastWallet : {};
     return {
       version: DB_VERSION,
       settings: {
@@ -465,9 +490,10 @@
         lang: st.lang === 'en' ? 'en' : 'it',
         lastBackup: isValidISO(st.lastBackup) ? st.lastBackup : '',
         backupSnooze: isValidISO(st.backupSnooze) ? st.backupSnooze : '',
-        guideSeen: st.guideSeen === true
+        guideSeen: st.guideSeen === true,
+        lastWallet: { expense: wid(lw.expense), income: wid(lw.income), saving: wid(lw.saving) }
       },
-      account: account, categories: categories, destinations: destinations, transactions: transactions
+      accounts: accounts, categories: categories, destinations: destinations, transactions: transactions
     };
   }
 
@@ -532,44 +558,82 @@
   }
 
   function findRef(id, type) {
-    var list = type === 'saving' ? db.destinations : db.categories;
+    var list = type === 'saving' ? db.destinations.concat(db.accounts) : db.categories;
     for (var i = 0; i < list.length; i++) { if (list[i].id === id) { return list[i]; } }
     return null;
   }
 
-  // Un movimento passa dal conto corrente se e un incasso oppure non indica un fondo come fonte.
-  function isMain(t) { return t.type === 'income' || !t.src; }
+  // Un portafoglio e un conto corrente oppure un fondo. Gli id sono unici tra i due gruppi.
+  function findAccount(id) {
+    for (var i = 0; i < db.accounts.length; i++) { if (db.accounts[i].id === id) { return db.accounts[i]; } }
+    return null;
+  }
+  function findFund(id) {
+    for (var i = 0; i < db.destinations.length; i++) { if (db.destinations[i].id === id) { return db.destinations[i]; } }
+    return null;
+  }
+  function walletsAll() { return db.accounts.concat(db.destinations); }
+  function walletName(id) {
+    var w = findAccount(id) || findFund(id);
+    return w ? nm(w) : T('Eliminata');
+  }
 
-  // Testo "da Fondo" per i movimenti che non partono dal conto corrente.
+  // Da dove parte un movimento e dove arriva. Un valore vuoto e il primo conto (dati vecchi).
+  function srcOf(t) { return t.type === 'income' ? '' : (t.src || db.accounts[0].id); }
+  function dstOf(t) { return t.type === 'income' ? (t.dst || db.accounts[0].id) : t.type === 'saving' ? t.refId : ''; }
+  function fromFund(t) { return !!findFund(srcOf(t)); }
+
+  // Testo con il conto o il fondo coinvolto. Compare solo quando serve: piu conti oppure un fondo.
   function srcLabel(t) {
-    if (isMain(t)) { return ''; }
-    var f = findRef(t.src, 'saving');
-    return T('da {n}', { n: f ? nm(f) : T('Eliminata') });
+    var id = t.type === 'income' ? dstOf(t) : srcOf(t);
+    if (db.accounts.length < 2 && !findFund(id)) { return ''; }
+    return T(t.type === 'income' ? 'su {n}' : 'da {n}', { n: walletName(id) });
   }
 
-  function srcName(t) {
-    if (isMain(t)) { return nm(db.account); }
-    var f = findRef(t.src, 'saving');
-    return f ? nm(f) : T('Eliminata');
+  // Conto o fondo per la colonna del CSV: dove e entrato il denaro per le entrate, da dove e uscito per il resto.
+  function srcName(t) { return walletName(t.type === 'income' ? dstOf(t) : srcOf(t)); }
+
+  // Come un movimento entra nei totali di un periodo. Ogni voce ha k = income, expense, fund o saved.
+  // Entrate: ogni incasso, su un conto o su un fondo. Spese: pagate da un conto, contano nei limiti.
+  // Spese da fondo: a parte. Accantonato: denaro che entra in un fondo da un conto o da un incasso.
+  // Spostamenti tra conti, da un fondo o tra fondi sono interni e restano fuori dai totali.
+  function flowParts(t) {
+    var parts, ref, df;
+    if (t.type === 'income') {
+      parts = [{ k: 'income' }];
+      df = findFund(dstOf(t));
+      if (df) { parts.push({ k: 'saved', key: df.id }); }
+      return parts;
+    }
+    if (t.type === 'expense') {
+      df = findFund(srcOf(t));
+      if (df) { return [{ k: 'fund', key: df.id }]; }
+      ref = findRef(t.refId, 'expense');
+      return [{ k: 'expense', key: ref ? ref.id : NONE_REF.id }];
+    }
+    if (findFund(srcOf(t))) { return []; }
+    df = findFund(t.refId);
+    if (df) { return [{ k: 'saved', key: df.id }]; }
+    return findAccount(t.refId) ? [] : [{ k: 'saved', key: NONE_REF.id }];
   }
 
-  // Saldi di conto e fondi su tutto lo storico. La chiave '' e il conto corrente.
-  // I saldi possono andare sotto zero. Un fondo eliminato non conta piu.
+  // Saldi di conti e fondi. I saldi possono andare sotto zero. Un conto o un fondo eliminato non conta piu.
+  // Il saldo iniziale vale alla sua data: i movimenti fino a quel giorno (incluso) ci sono gia dentro.
   function balances() {
     var b = {};
-    function slot(key, opening) { b[key] = { opening: opening, inn: 0, out: 0, balance: opening }; }
-    function move(key, amount, dir) {
-      var s = b[key];
-      if (!s) { return; }
-      if (dir > 0) { s.inn += amount; } else { s.out += amount; }
-      s.balance += dir * amount;
+    function slot(w) { b[w.id] = { opening: w.opening, date: w.openingDate || '', inn: 0, out: 0, balance: w.opening }; }
+    function move(id, t, dir) {
+      var s = b[id];
+      if (!s || (s.date && t.date <= s.date)) { return; }
+      if (dir > 0) { s.inn += t.amount; } else { s.out += t.amount; }
+      s.balance += dir * t.amount;
     }
-    slot('', db.account.opening);
-    db.destinations.forEach(function (d) { slot(d.id, d.opening); });
+    db.accounts.forEach(slot);
+    db.destinations.forEach(slot);
     db.transactions.forEach(function (t) {
-      if (t.type === 'income') { move('', t.amount, 1); return; }
-      move(t.src || '', t.amount, -1);
-      if (t.type === 'saving' && t.refId) { move(t.refId, t.amount, 1); }
+      if (t.type === 'income') { move(dstOf(t), t, 1); return; }
+      move(srcOf(t), t, -1);
+      if (t.type === 'saving' && t.refId) { move(t.refId, t, 1); }
     });
     return b;
   }
@@ -577,9 +641,9 @@
   // Colore nuovo: il primo della palette non usato, poi tinte generate senza fine.
   function nextColor() {
     var used = {};
-    db.categories.concat(db.destinations).forEach(function (x) { used[String(x.color).toLowerCase()] = 1; });
+    db.categories.concat(db.destinations, db.accounts).forEach(function (x) { used[String(x.color).toLowerCase()] = 1; });
     for (var i = 0; i < COLORS.length; i++) { if (!used[COLORS[i]]) { return COLORS[i]; } }
-    return hslToHex(Math.round(((db.categories.length + db.destinations.length) * 137.508) % 360), 62, 46);
+    return hslToHex(Math.round(((db.categories.length + db.destinations.length + db.accounts.length) * 137.508) % 360), 62, 46);
   }
 
   function periodLabel() {
@@ -597,16 +661,12 @@
   function compute() {
     var income = 0, expense = 0, saved = 0, exp = {}, sav = {}, fund = {}, fundTotal = 0;
     db.transactions.filter(inPeriod).forEach(function (t) {
-      var ref = findRef(t.refId, t.type);
-      var key = ref ? ref.id : NONE_REF.id;
-      if (!isMain(t)) {
-        // Spesa pagata da un fondo o spostamento tra fondi: fuori da spese, accantonato e saldo del mese.
-        if (t.type === 'expense' && findRef(t.src, 'saving')) { fund[t.src] = (fund[t.src] || 0) + t.amount; fundTotal += t.amount; }
-        return;
-      }
-      if (t.type === 'income') { income += t.amount; }
-      else if (t.type === 'expense') { expense += t.amount; exp[key] = (exp[key] || 0) + t.amount; }
-      else { saved += t.amount; sav[key] = (sav[key] || 0) + t.amount; }
+      flowParts(t).forEach(function (p) {
+        if (p.k === 'income') { income += t.amount; }
+        else if (p.k === 'expense') { expense += t.amount; exp[p.key] = (exp[p.key] || 0) + t.amount; }
+        else if (p.k === 'saved') { saved += t.amount; sav[p.key] = (sav[p.key] || 0) + t.amount; }
+        else { fund[p.key] = (fund[p.key] || 0) + t.amount; fundTotal += t.amount; }
+      });
     });
 
     var expItems = [];
@@ -664,7 +724,7 @@
     if (!c || !c.limit) { return null; }
     var ym = tx.date.slice(0, 7), before = 0;
     db.transactions.forEach(function (t) {
-      if (t.type === 'expense' && isMain(t) && t.refId === tx.refId && t.date.slice(0, 7) === ym && t.id !== tx.id) { before += t.amount; }
+      if (t.type === 'expense' && !fromFund(t) && t.refId === tx.refId && t.date.slice(0, 7) === ym && t.id !== tx.id) { before += t.amount; }
     });
     var after = before + tx.amount, lim = c.limit;
     var pct = Math.floor(after * 100 / lim);
@@ -733,7 +793,12 @@
     var data = [], i;
     for (i = 0; i < 12; i++) { data.push({ income: 0, expense: 0, saving: 0 }); }
     db.transactions.forEach(function (t) {
-      if (t.date.slice(0, 4) === String(ui.year) && isMain(t)) { data[+t.date.slice(5, 7) - 1][t.type] += t.amount; }
+      if (t.date.slice(0, 4) === String(ui.year)) {
+        var m = data[+t.date.slice(5, 7) - 1];
+        flowParts(t).forEach(function (p) {
+          if (p.k === 'income') { m.income += t.amount; } else if (p.k === 'expense') { m.expense += t.amount; } else if (p.k === 'saved') { m.saving += t.amount; }
+        });
+      }
     });
     var max = 1;
     data.forEach(function (d) { max = Math.max(max, d.income, d.expense, d.saving); });
@@ -893,7 +958,7 @@
   }
 
   function renderList() {
-    var filters = [['all', T('Tutti')], ['expense', T('Spese')], ['income', T('Entrate')], ['saving', T('Accantonamenti')]];
+    var filters = [['all', T('Tutti')], ['expense', T('Spese')], ['income', T('Entrate')], ['saving', T('Trasferimenti')]];
     var sorts = [['date', T('Per data')], ['amount', T('Per importo')]];
     var out = '<div class="search-wrap"><input type="search" id="tx-search" class="field-input search-input" placeholder="' + T('Cerca per nota, categoria, importo') + '" aria-label="' + T('Cerca nei movimenti') + '" value="' + esc(ui.query) + '" autocomplete="off" enterkeyhint="search"></div>';
     out += '<div class="filters" role="group" aria-label="' + T('Filtro') + '">';
@@ -960,14 +1025,17 @@
   // Tab Sintesi Patrimonio: stato di conto e fondi su tutto lo storico, non sul periodo scelto.
   function renderWealth() {
     var b = balances(), total = 0, funds = 0;
-    Object.keys(b).forEach(function (k) { total += b[k].balance; if (k) { funds += b[k].balance; } });
-    var main = b[''];
+    Object.keys(b).forEach(function (k) { total += b[k].balance; if (findFund(k)) { funds += b[k].balance; } });
     var out = '<h2 class="section-title">' + T('Sintesi Patrimonio') + '</h2>' +
       '<section class="hero" aria-label="' + T('Sintesi Patrimonio') + '">' +
       '<div><span class="lbl">' + T('Patrimonio totale') + '</span><strong class="big' + (total < 0 ? ' neg' : '') + '">' + money(total) + '</strong><span class="hint">' + T('Conto più fondi. I trasferimenti non lo cambiano.') + '</span></div>' +
       '<div><span class="lbl">' + T('Nei fondi e risparmi') + '</span><strong class="mid' + (funds < 0 ? ' neg' : '') + '">' + money(funds) + '</strong></div></section>';
-    out += '<h2 class="section-title">' + T('Conto') + '</h2><div class="list-card">' +
-      wealthRow(db.account, main, T('Entrate {a} · Uscite {b}', { a: money(main.inn), b: money(main.out) }), 'data-action="edit-account"') + '</div>';
+    out += '<h2 class="section-title">' + T('Conti') + '</h2><div class="list-card">';
+    db.accounts.forEach(function (a) {
+      var s = b[a.id];
+      out += wealthRow(a, s, T('Entrate {a} · Uscite {b}', { a: money(s.inn), b: money(s.out) }), 'data-action="edit-account" data-id="' + esc(a.id) + '"');
+    });
+    out += '<button type="button" class="add-btn" data-action="add-cat" data-kind="account">' + T('+ Aggiungi conto') + '</button></div>';
     out += '<h2 class="section-title">' + T('Fondi e risparmi') + '</h2><div class="list-card">';
     db.destinations.forEach(function (d) {
       var s = b[d.id];
@@ -1056,18 +1124,52 @@
     return type === 'saving' ? db.destinations : db.categories.filter(function (c) { return c.type === type; });
   }
 
+  // Conti e fondi scelti per il movimento. Spese: i conti e i fondi usabili. Entrate e trasferimenti: tutti.
+  function walletOptions(type, cur) {
+    var list = db.accounts.map(function (a) { return { id: a.id, ref: a }; });
+    db.destinations.forEach(function (d) {
+      if (type !== 'expense' || d.spendable || d.id === cur) { list.push({ id: d.id, ref: d }); }
+    });
+    return list;
+  }
+
+  // Ultimo conto o fondo usato per quel tipo di movimento, altrimenti il primo conto.
+  function defaultWallet(type) {
+    var id = db.settings.lastWallet && db.settings.lastWallet[type];
+    var ok = walletOptions(type, '').some(function (o) { return o.id === id; });
+    return ok ? id : db.accounts[0].id;
+  }
+
+  function existingWallet(tx) {
+    var id = tx.type === 'income' ? dstOf(tx) : srcOf(tx);
+    return findAccount(id) || findFund(id) ? id : db.accounts[0].id;
+  }
+
   function openEntry(type, tx) {
     entry = tx
-      ? { mode: 'edit', id: tx.id, type: tx.type, amountStr: centsToStr(tx.amount), refId: tx.refId, src: tx.type !== 'income' && tx.src && findRef(tx.src, 'saving') ? tx.src : '', note: tx.note || '', date: tx.date, createdAt: tx.createdAt }
-      : { mode: 'new', id: null, type: type, amountStr: '', refId: null, src: '', note: '', date: todayISO(), createdAt: Date.now() };
+      ? { mode: 'edit', id: tx.id, type: tx.type, amountStr: centsToStr(tx.amount), refId: tx.refId, wal: existingWallet(tx), note: tx.note || '', date: tx.date, createdAt: tx.createdAt }
+      : { mode: 'new', id: null, type: type, amountStr: '', refId: null, wal: defaultWallet(type), note: '', date: todayISO(), createdAt: Date.now() };
     sheetOpened();
     renderEntry();
   }
 
   function dateText(iso) { return iso === todayISO() ? T('Oggi') : fmtDate(iso); }
 
+  // Griglia di scelta: categorie per spese ed entrate, conti e fondi (tranne la partenza) per i trasferimenti.
+  function gridHtml() {
+    var refs = entry.type === 'saving' ? walletsAll().filter(function (w) { return w.id !== entry.wal; }) : refsFor(entry.type);
+    var h = '';
+    if (!refs.length) {
+      h += '<p class="empty" style="grid-column:1/-1">' + T(entry.type === 'saving' ? 'Nessun altro conto o fondo. Aggiungine uno dal tab Sintesi.' : 'Nessuna voce. Creane una dal tab Categorie.') + '</p>';
+    }
+    refs.forEach(function (r) {
+      h += '<button type="button" class="cat-tile' + (entry.refId === r.id ? ' on' : '') + '" data-action="pick-ref" data-ref="' + esc(r.id) + '">' +
+        '<span class="ci" style="background:' + r.color + ';color:' + textOn(r.color) + '">' + esc(r.icon) + '</span><span class="cn">' + esc(nm(r)) + '</span></button>';
+    });
+    return h;
+  }
+
   function renderEntry() {
-    var refs = refsFor(entry.type);
     var keys = ['1', '2', '3', '÷', '4', '5', '6', '×', '7', '8', '9', '−', ',', '0', 'back', '+'];
     var title = T(entry.mode === 'edit' ? EDIT_TITLE[entry.type] : NEW_TITLE[entry.type]);
     var h = '<div class="sheet-backdrop" data-action="close-sheet"></div><div class="sheet" role="dialog" aria-modal="true" aria-label="' + title + '" tabindex="-1">' +
@@ -1083,12 +1185,7 @@
       h += '<button type="button" class="key' + (isOp(k) ? ' op' : (k === 'back' || k === ',' ? ' fn' : '')) + '" data-action="key" data-key="' + k + '"' + (label ? ' aria-label="' + label + '"' : '') + '>' + (k === 'back' ? '⌫' : k === ',' ? DEC : k) + '</button>';
     });
     h += '</div>' + srcRowHtml() + '<div class="grid-title">' + T(entry.type === 'saving' ? 'Destinazione' : 'Categoria') + (entry.mode === 'new' ? T(': tocca per salvare') : '') + '</div><div class="cat-grid">';
-    if (!refs.length) { h += '<p class="empty" style="grid-column:1/-1">' + T('Nessuna voce. Creane una dal tab Categorie.') + '</p>'; }
-    refs.forEach(function (r) {
-      h += '<button type="button" class="cat-tile' + (entry.refId === r.id ? ' on' : '') + '" data-action="pick-ref" data-ref="' + esc(r.id) + '">' +
-        '<span class="ci" style="background:' + r.color + ';color:' + textOn(r.color) + '">' + esc(r.icon) + '</span><span class="cn">' + esc(nm(r)) + '</span></button>';
-    });
-    h += '</div>';
+    h += gridHtml() + '</div>';
     if (entry.mode === 'edit') {
       h += '<div class="sheet-foot"><button type="button" class="btn danger" data-action="delete-tx">' + T('Elimina') + '</button><button type="button" class="btn primary" data-action="save-edit">' + T('Salva') + '</button></div>';
     }
@@ -1137,24 +1234,15 @@
     updateAmount();
   }
 
-  // Fonti selezionabili: il conto corrente e i fondi. Le spese usano solo i fondi marcati come usabili.
-  function sourceOptions() {
-    if (entry.type === 'income') { return []; }
-    if (entry.type === 'saving' && db.destinations.length < 2) { return []; }
-    var list = [{ id: '', ref: db.account }];
-    db.destinations.forEach(function (d) {
-      if (entry.type === 'saving' || d.spendable || d.id === entry.src) { list.push({ id: d.id, ref: d }); }
-    });
-    return list;
-  }
-
+  // Riga dei conti e fondi: da dove esce il denaro (spese, trasferimenti) o dove entra (entrate).
   function srcRowHtml() {
-    var opts = sourceOptions();
+    var opts = walletOptions(entry.type, entry.wal);
     if (opts.length < 2) { return ''; }
     var b = balances();
-    var h = '<div class="grid-title">' + T(entry.type === 'saving' ? 'Da' : 'Pagato da') + '</div><div class="src-row" role="group" aria-label="' + T('Fonte del pagamento') + '">';
+    var title = T(entry.type === 'income' ? 'Versato su' : entry.type === 'saving' ? 'Da' : 'Pagato da');
+    var h = '<div class="grid-title">' + title + '</div><div class="src-row" role="group" aria-label="' + title + '">';
     opts.forEach(function (o) {
-      var bal = b[o.id] ? b[o.id].balance : 0, on = entry.src === o.id;
+      var bal = b[o.id] ? b[o.id].balance : 0, on = entry.wal === o.id;
       h += '<button type="button" class="src-chip' + (on ? ' on' : '') + '" data-action="pick-src" data-src="' + esc(o.id) + '" aria-pressed="' + on + '">' +
         '<span class="si" style="background:' + o.ref.color + ';color:' + textOn(o.ref.color) + '">' + esc(o.ref.icon) + '</span>' +
         '<span class="st"><span class="sn">' + esc(nm(o.ref)) + '</span><small class="' + (bal < 0 ? 'neg' : '') + '">' + money(bal) + '</small></span></button>';
@@ -1163,7 +1251,13 @@
   }
 
   function pickSrc(id) {
-    entry.src = id;
+    entry.wal = id;
+    if (entry.type === 'saving') {
+      // La partenza non puo essere anche l arrivo: aggiorna la griglia delle destinazioni.
+      if (entry.refId === id) { entry.refId = null; }
+      var grid = $('.cat-grid');
+      if (grid) { grid.innerHTML = gridHtml(); }
+    }
     Array.prototype.forEach.call(document.querySelectorAll('.src-chip'), function (b) {
       var on = b.getAttribute('data-src') === id;
       b.classList.toggle('on', on);
@@ -1189,11 +1283,10 @@
       return;
     }
     if (!entry.refId) { toast(T('Scegli una categoria.'), 'warn', 2200); return; }
-    var src = entry.type === 'income' ? '' : (entry.src || '');
-    if (entry.type === 'saving' && src === entry.refId) { toast(T('La fonte e la destinazione coincidono.'), 'warn', 2400); return; }
-    var tx = { id: entry.id || uid(), type: entry.type, amount: cents, refId: entry.refId, src: src, date: entry.date, note: String(entry.note || '').trim().slice(0, 200), createdAt: entry.createdAt };
+    if (entry.type === 'saving' && entry.wal === entry.refId) { toast(T('La fonte e la destinazione coincidono.'), 'warn', 2400); return; }
+    var tx = { id: entry.id || uid(), type: entry.type, amount: cents, refId: entry.refId, src: entry.type === 'income' ? '' : entry.wal, dst: entry.type === 'income' ? entry.wal : '', date: entry.date, note: String(entry.note || '').trim().slice(0, 200), createdAt: entry.createdAt };
     var before = balances();
-    var alertInfo = tx.type === 'expense' && isMain(tx) ? budgetAlert(tx) : null;
+    var alertInfo = tx.type === 'expense' && !fromFund(tx) ? budgetAlert(tx) : null;
     if (entry.mode === 'edit') {
       db.transactions = db.transactions.map(function (t) { return t.id === tx.id ? tx : t; });
     } else {
@@ -1202,9 +1295,11 @@
     var wasEdit = entry.mode === 'edit';
     // Un fondo o il conto che passa sotto zero con questo movimento: avviso, ma il movimento resta.
     var after = balances(), negMsg = null;
-    if (tx.type !== 'income' && before[src] && after[src].balance < 0 && before[src].balance >= 0) {
-      negMsg = T('⚠️ {name}: saldo in negativo ({b}).', { name: nm(src ? findRef(src, 'saving') : db.account), b: money(after[src].balance) });
+    var from = srcOf(tx);
+    if (tx.type !== 'income' && before[from] && after[from].balance < 0 && before[from].balance >= 0) {
+      negMsg = T('⚠️ {name}: saldo in negativo ({b}).', { name: walletName(from), b: money(after[from].balance) });
     }
+    db.settings.lastWallet[tx.type] = entry.wal;
     var saved = save();
     ui.year = +tx.date.slice(0, 4);
     ui.month = +tx.date.slice(5, 7) - 1;
@@ -1306,15 +1401,15 @@
   function openEditor(kind, id) {
     sheetOpened();
     var ex = null;
-    if (kind === 'account') { ex = db.account; }
+    if (kind === 'account') { ex = id ? findAccount(id) : null; }
     else if (id) { ex = kind === 'saving' ? findRef(id, 'saving') : findRef(id, kind); }
     editor = {
       kind: kind, id: id || null,
       color: ex ? ex.color : nextColor(),
-      icon: ex ? ex.icon : EMOJIS[0]
+      icon: ex ? ex.icon : (kind === 'account' ? '💳' : EMOJIS[0])
     };
     var h = '<div class="sheet-backdrop" data-action="close-sheet"></div><div class="sheet" role="dialog" aria-modal="true" aria-label="' + T('Editor') + '" tabindex="-1">' +
-      '<div class="sheet-grip"></div><div class="sheet-head"><strong>' + T(kind === 'account' ? 'Modifica conto' : (ex ? 'Modifica ' : 'Nuova ') + (kind === 'saving' ? 'destinazione' : 'categoria')) + '</strong>' +
+      '<div class="sheet-grip"></div><div class="sheet-head"><strong>' + T(kind === 'account' ? (ex ? 'Modifica conto' : 'Nuovo conto') : (ex ? 'Modifica ' : 'Nuova ') + (kind === 'saving' ? 'destinazione' : 'categoria')) + '</strong>' +
       '<button type="button" class="icon-btn" data-action="close-sheet" aria-label="' + T('Chiudi') + '">✕</button></div>' +
       '<label class="field-label" for="ed-name">' + T('Nome') + '</label><input class="field-input" id="ed-name" type="text" maxlength="30" value="' + esc(ex ? nm(ex) : '') + '" autocomplete="off">' +
       '<label class="field-label" for="ed-icon">' + T('Icona o emoji') + '</label><input class="field-input" id="ed-icon" type="text" maxlength="8" value="' + esc(editor.icon) + '" autocomplete="off">' +
@@ -1327,13 +1422,15 @@
       h += '<label class="field-label" for="ed-limit">' + T('Limite di spesa mensile in euro (facoltativo)') + '</label><input class="field-input" id="ed-limit" type="text" inputmode="decimal" placeholder="' + T('Nessun limite') + '" value="' + (ex && ex.limit ? centsToStr(ex.limit).replace(',', DEC) : '') + '" autocomplete="off">';
     }
     if (kind === 'saving' || kind === 'account') {
-      h += '<label class="field-label" for="ed-opening">' + T('Saldo iniziale in euro (facoltativo)') + '</label><input class="field-input" id="ed-opening" type="text" inputmode="decimal" placeholder="0" value="' + (ex && ex.opening ? signedStr(ex.opening) : '') + '" autocomplete="off">';
+      h += '<label class="field-label" for="ed-opening">' + T('Saldo iniziale in euro (facoltativo)') + '</label><input class="field-input" id="ed-opening" type="text" inputmode="decimal" placeholder="0" value="' + (ex && ex.opening ? signedStr(ex.opening) : '') + '" autocomplete="off">' +
+        '<label class="field-label" for="ed-opening-date">' + T('Data del saldo iniziale (facoltativa)') + '</label><input class="field-input" id="ed-opening-date" type="date" value="' + (ex ? (ex.openingDate || '') : todayISO()) + '">' +
+        '<p class="hint">' + T('Le entrate e le uscite fino a questa data (inclusa) sono già nel saldo e non vengono contate.') + '</p>';
     }
     if (kind === 'saving') {
       h += '<label class="check-row"><input type="checkbox" id="ed-spend"' + (!ex || ex.spendable ? ' checked' : '') + '><span>' + T('Usabile per pagare spese') + '</span></label>';
     }
     h += '<div class="err" id="ed-err" role="alert"></div><div class="sheet-foot">' +
-      (ex && kind !== 'account' ? '<button type="button" class="btn danger" data-action="delete-cat">' + T('Elimina') + '</button>' : '<button type="button" class="btn" data-action="close-sheet">' + T('Annulla') + '</button>') +
+      (ex && (kind !== 'account' || db.accounts.length > 1) ? '<button type="button" class="btn danger" data-action="delete-cat">' + T('Elimina') + '</button>' : '<button type="button" class="btn" data-action="close-sheet">' + T('Annulla') + '</button>') +
       '<button type="button" class="btn primary" data-action="save-cat">' + T('Salva') + '</button></div></div>';
     $('#sheet-root').innerHTML = h;
     document.body.classList.add('sheet-open');
@@ -1356,13 +1453,20 @@
       opening = parseOpening($('#ed-opening').value);
       if (isNaN(opening)) { err.textContent = T('Il saldo iniziale non è valido.'); return; }
     }
+    var odate = '';
+    if (editor.kind === 'saving' || editor.kind === 'account') {
+      odate = $('#ed-opening-date').value;
+      if (odate && !isValidISO(odate)) { err.textContent = T('La data non è valida.'); return; }
+    }
     if (editor.kind === 'account') {
-      db.account.name = name; db.account.icon = icon; db.account.color = editor.color; db.account.opening = opening;
+      var a = editor.id ? findAccount(editor.id) : null;
+      if (a) { a.name = name; a.icon = icon; a.color = editor.color; a.opening = opening; a.openingDate = odate; }
+      else { db.accounts.push({ id: uid(), name: name, icon: icon, color: editor.color, opening: opening, openingDate: odate }); }
     } else if (editor.kind === 'saving') {
       var spend = $('#ed-spend').checked;
       var d = editor.id ? findRef(editor.id, 'saving') : null;
-      if (d) { d.name = name; d.icon = icon; d.color = editor.color; d.opening = opening; d.spendable = spend; }
-      else { db.destinations.push({ id: uid(), name: name, icon: icon, color: editor.color, opening: opening, spendable: spend }); }
+      if (d) { d.name = name; d.icon = icon; d.color = editor.color; d.opening = opening; d.openingDate = odate; d.spendable = spend; }
+      else { db.destinations.push({ id: uid(), name: name, icon: icon, color: editor.color, opening: opening, openingDate: odate, spendable: spend }); }
     } else {
       var c = editor.id ? findRef(editor.id, editor.kind) : null;
       if (c) { c.name = name; c.icon = icon; c.color = editor.color; c.limit = limit; }
@@ -1377,15 +1481,22 @@
   function deleteCat() {
     if (!editor || !editor.id) { return; }
     var id = editor.id, kind = editor.kind;
-    var ref = kind === 'saving' ? findRef(id, 'saving') : findRef(id, kind);
-    var used = db.transactions.filter(function (t) { return t.refId === id; }).length;
-    var msg = T('Eliminare “{n}”?', { n: ref ? nm(ref) : '' }) + (used ? (used === 1 ? T(' Il movimento collegato resta, ma senza categoria.') : T(' I {u} movimenti collegati restano, ma senza categoria.', { u: used })) : '');
-    if (kind === 'saving') {
+    var wal = kind === 'saving' || kind === 'account';
+    var ref = kind === 'account' ? findAccount(id) : kind === 'saving' ? findRef(id, 'saving') : findRef(id, kind);
+    if (kind === 'account' && db.accounts.length < 2) { return; }
+    var used = db.transactions.filter(function (t) { return t.refId === id || (wal && (t.src === id || t.dst === id)); }).length;
+    var msg = T('Eliminare “{n}”?', { n: ref ? nm(ref) : '' });
+    if (used) {
+      msg += wal ? (used === 1 ? T(' Il movimento collegato non incide più sui saldi.') : T(' I {u} movimenti collegati non incidono più sui saldi.', { u: used }))
+        : (used === 1 ? T(' Il movimento collegato resta, ma senza categoria.') : T(' I {u} movimenti collegati restano, ma senza categoria.', { u: used }));
+    }
+    if (wal) {
       var bb = balances()[id];
-      if (bb && bb.balance !== 0) { msg += ' ' + T('Il saldo del fondo ({b}) non verrà più conteggiato nel patrimonio.', { b: money(bb.balance) }); }
+      if (bb && bb.balance !== 0) { msg += ' ' + T('Il saldo di “{n}” ({b}) non verrà più conteggiato nel patrimonio.', { n: ref ? nm(ref) : '', b: money(bb.balance) }); }
     }
     if (!window.confirm(msg)) { return; }
-    if (kind === 'saving') { db.destinations = db.destinations.filter(function (d) { return d.id !== id; }); }
+    if (kind === 'account') { db.accounts = db.accounts.filter(function (a) { return a.id !== id; }); }
+    else if (kind === 'saving') { db.destinations = db.destinations.filter(function (d) { return d.id !== id; }); }
     else { db.categories = db.categories.filter(function (c) { return c.id !== id; }); }
     save();
     closeSheet();
@@ -1420,7 +1531,7 @@
     db.settings.lastBackup = todayISO();
     db.settings.backupSnooze = '';
     save();
-    var payload = JSON.stringify({ app: 'SPET', exportedAt: new Date().toISOString(), version: db.version, settings: db.settings, account: db.account, categories: db.categories, destinations: db.destinations, transactions: db.transactions }, null, 2);
+    var payload = JSON.stringify({ app: 'SPET', exportedAt: new Date().toISOString(), version: db.version, settings: db.settings, accounts: db.accounts, categories: db.categories, destinations: db.destinations, transactions: db.transactions }, null, 2);
     download('spet-backup-' + stamp() + '.json', payload, 'application/json');
     render();
     toast(T('Backup pronto.'), 'ok');
@@ -1437,7 +1548,7 @@
   function exportCSV(scope) {
     var txs = scope === 'all' ? db.transactions.slice() : db.transactions.filter(inPeriod);
     txs.sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : a.createdAt - b.createdAt; });
-    var rows = [T('Data;Tipo;Categoria o destinazione;Importo EUR;Note;Fonte').split(';')];
+    var rows = [T('Data;Tipo;Categoria o destinazione;Importo EUR;Note;Conto o fondo').split(';')];
     txs.forEach(function (t) {
       var ref = findRef(t.refId, t.type) || NONE_REF;
       rows.push([fmtDate(t.date), typeLabel(t.type), nm(ref), eur(t.amount), t.note, srcName(t)]);
@@ -1533,7 +1644,7 @@
       case 'key': if (entry) { pressKey(el.getAttribute('data-key')); } break;
       case 'pick-ref': if (entry) { pickRef(el.getAttribute('data-ref')); } break;
       case 'pick-src': if (entry) { pickSrc(el.getAttribute('data-src')); } break;
-      case 'edit-account': openEditor('account', null); break;
+      case 'edit-account': openEditor('account', el.getAttribute('data-id')); break;
       case 'save-edit': if (entry) { commitEntry(); } break;
       case 'delete-tx': deleteTx(); break;
       case 'close-sheet': closeSheet(); break;
