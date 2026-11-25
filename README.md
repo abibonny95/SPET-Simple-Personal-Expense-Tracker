@@ -17,11 +17,13 @@ SPET is a Progressive Web App (PWA) built with plain HTML, CSS and JavaScript. T
   - **Allocations** — money moved to your own destinations (savings account, pension fund, ETFs/investments, or any destination you create).
 
 **Accounts, funds and wealth overview**
-- A checking account with an optional opening balance, updated by every income and outflow.
+- Any number of checking accounts, each with its own balance, updated by every income and outflow.
+- Each account or fund has an optional opening balance with a date. Income and outflows up to that date are already in the balance and are not counted, so you can type today's balance without double counting your history. Monthly reports still show the full history.
 - Each allocation destination is a fund with its own balance and opening balance. Mark a fund as "can pay expenses" (for example a "Fixed costs" fund fed with 50 per month).
+- Income can be paid into any account or fund. Transfers move money between any two accounts or funds, in any direction.
 - When you add an expense, choose the payment source. An expense paid from a fund lowers that fund, not the checking account, and stays out of the month's Expenses and Net balance.
 - Any account or fund can go below zero. You get a warning when it happens, and the overview shows it in red, so you can see whether what you set aside covers the year.
-- Moving money between the account and funds (or fund to fund) never changes total wealth.
+- Moving money between accounts and funds never changes total wealth. Only income that goes into a fund counts as allocated, together with transfers from an account to a fund.
 - The Overview tab shows total wealth, the account and every fund. The monthly donut stays on Home.
 
 **Budgets with alerts**

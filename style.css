@@ -1,4 +1,4 @@
-/* SPET 1.3.0 - stile mobile first, tema chiaro e scuro */
+/* SPET 1.4.0 - stile mobile first, tema chiaro e scuro */
 
 /* tokens:start */
 :root {
@@ -793,6 +793,7 @@ body.no-actions .actions { display: none; }
 .swatch-custom input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
 .swatch-custom span { pointer-events: none; }
 
+.sheet .hint { margin: -2px 2px 8px; }
 .check-row { display: flex; align-items: center; gap: 12px; min-height: 48px; margin: 6px 2px; font-weight: 600; }
 .check-row input { width: 24px; height: 24px; accent-color: var(--primary); flex: none; }
 
