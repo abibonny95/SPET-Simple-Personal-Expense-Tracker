@@ -1,4 +1,4 @@
-/* SPET 1.4.0 - Simple Personal Expense Tracker
+/* SPET 1.5.0 - Simple Personal Expense Tracker
  * App a pagina singola. Nessuna dipendenza, nessun server.
  * Dati in localStorage, importi in centesimi interi, date come YYYY-MM-DD locali. */
 (function () {
@@ -6,7 +6,7 @@
 
   // ---------------------------------------------------------------- costanti
 
-  var APP_VERSION = '1.4.0';
+  var APP_VERSION = '1.5.0';
   var STORAGE_KEY = 'spet:data';
   var LEGACY_KEY = 'wealthtrack:data'; // nome della prima versione: serve solo a migrare i dati
   var DB_VERSION = 3;
@@ -14,17 +14,29 @@
   var LOCKED_SYS = ['deposit', 'pension', 'etf'];
   var MONTHS_SHORT = { it: ['G', 'F', 'M', 'A', 'M', 'G', 'L', 'A', 'S', 'O', 'N', 'D'], en: ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'] };
   var TYPE_LABEL = { expense: 'Spesa', income: 'Entrata', saving: 'Trasferimento' };
-  var NONE_REF = { id: '__none', name: 'Eliminata', icon: '❔', color: '#94a3b8' };
-  var COLORS = ['#ef4444', '#f97316', '#f59e0b', '#eab308', '#84cc16', '#22c55e', '#14b8a6',
-    '#06b6d4', '#3b82f6', '#6366f1', '#8b5cf6', '#d946ef', '#ec4899', '#64748b',
-    '#b91c1c', '#c2410c', '#b45309', '#a16207', '#4d7c0f', '#15803d', '#0f766e',
-    '#0e7490', '#1d4ed8', '#4338ca', '#6d28d9', '#a21caf', '#be185d', '#475569'];
-  var EMOJIS = ['🏠', '🏡', '🛒', '🚗', '⛽', '🚌', '🚆', '✈️', '🏍️', '🚲', '🍽️', '🍕', '☕', '🍺', '🍷', '🥗',
-    '🍔', '🍰', '💊', '🏥', '🦷', '🧴', '💇', '🏋️', '⚽', '🎉', '🎬', '🎮', '🎵', '📚', '🎓', '🖥️',
-    '💻', '📱', '📺', '💡', '🔥', '💧', '📶', '📦', '👕', '👟', '👜', '💄', '🎁', '🐾', '🐶', '🐱',
-    '👶', '🧸', '🔧', '🧰', '🛠️', '🪴', '🌱', '🏖️', '🏕️', '🧾', '📄', '🛡️', '⚖️', '💼', '💶', '💰',
-    '🏦', '🪙', '💳', '📈', '🧓', '🏆', '🎯', '⭐', '❤️', '🙏', '🚿', '🧹', '🧺', '🛏️', '🪑', '🔑',
-    '📮', '✂️', '🎂', '🍼', '🚕', '🅿️', '🧳', '🎟️', '🎻', '🩺', '🧘', '🚰'];
+  var NONE_REF = { id: '__none', name: 'Eliminata', icon: '❔', color: '#AFC0D6' };
+  // Palette di base: toni morbidi, senza viola come base. Nel disegno ogni tinta passa da tc() (vedi sotto).
+  var COLORS = ['#F59E9E', '#F7B27E', '#F4D675', '#CBE08A', '#9ED8A0', '#7FD6B8', '#6FD0D4', '#7CC6F2', '#7FA8F0', '#9CB6F7', '#B6A9F0', '#EBA3D3', '#F2A0B8', '#AFC0D6', '#D98080', '#E0966A', '#CDB052', '#A9BD66', '#7FBB86', '#60B89B', '#55B3BE', '#5FA9D9', '#5F8FD9', '#5A84CE', '#8F82D6', '#CB86B8', '#D8869C', '#8798B0'];
+  // Libreria emoji a gruppi. L'ordine dei gruppi cambia con il tipo di voce che si sta modificando.
+  var EMOJI_GROUPS = [
+    { id: 'home', it: 'Casa e utenze', en: 'Home & utilities', list: ['🏡', '🏠', '🛋️', '🛏️', '🪴', '🔑', '🧹', '🧺', '🚿', '🛁', '💡', '🔌', '🔥', '💧', '🌡️', '📶', '🗑️', '🔧', '🧰', '🪟', '🔒'] },
+    { id: 'food', it: 'Cibo e ristoranti', en: 'Food & dining', list: ['🛒', '🥑', '🥦', '🍎', '🥖', '🧀', '🥩', '🍝', '🍕', '🍔', '🍣', '🥗', '🍽️', '☕', '🧋', '🍺', '🍷', '🍰', '🍦', '🥐', '🍿'] },
+    { id: 'transport', it: 'Trasporti e auto', en: 'Transport & car', list: ['🚗', '⛽', '🔋', '🚌', '🚆', '🚇', '🚕', '🚲', '🛵', '🏍️', '🅿️', '🛣️', '🚧', '🚦', '✈️', '⛴️'] },
+    { id: 'health', it: 'Salute e benessere', en: 'Health & wellness', list: ['💊', '🩺', '🏥', '🦷', '👓', '🧘', '🏋️', '🏃', '💆', '💇', '💅', '🧴', '🩹', '🧠'] },
+    { id: 'shopping', it: 'Shopping e stile di vita', en: 'Shopping & lifestyle', list: ['👕', '👗', '👟', '👜', '💄', '💍', '🎁', '📦', '🛍️', '🕶️', '⌚', '🧸', '🐶', '🐱', '🐾', '🍼', '👶', '🌷', '🧵', '✂️'] },
+    { id: 'leisure', it: 'Svago e viaggi', en: 'Leisure & travel', list: ['🎬', '🎮', '🎵', '🎟️', '🎭', '🎨', '📚', '🎉', '🎂', '🏖️', '🏕️', '🧳', '🗺️', '⛷️', '⚽', '🎣', '🎻', '🎤', '🏨', '🎢'] },
+    { id: 'work', it: 'Lavoro, studio e servizi', en: 'Work, study & services', list: ['💼', '🖥️', '💻', '📱', '🎓', '📖', '✏️', '🧾', '📄', '📮', '🖨️', '📺'] },
+    { id: 'finance', it: 'Finanza e risparmio', en: 'Finance & savings', list: ['💶', '💰', '🏦', '🪙', '💳', '📈', '📊', '🧓', '🏆', '🎯', '🛡️', '⚖️', '🧮', '🏧', '💸', '🤝', '🌱', '📑', '🔐', '⭐'] }
+  ];
+  var GROUP_FIRST = { expense: [], income: ['finance', 'work'], saving: ['finance'], account: ['finance'] };
+  function groupsFor(kind) {
+    var first = GROUP_FIRST[kind] || [];
+    var head = [], tail = [];
+    EMOJI_GROUPS.forEach(function (g) { (first.indexOf(g.id) >= 0 ? head : tail).push(g); });
+    head.sort(function (a, b) { return first.indexOf(a.id) - first.indexOf(b.id); });
+    return head.concat(tail);
+  }
+  var EMOJIS = [].concat.apply([], EMOJI_GROUPS.map(function (g) { return g.list; }));
 
   // -------------------------------------------------------------------- lingue
   // Le chiavi sono i testi italiani: T('testo') ritorna l'inglese se la lingua e en,
@@ -247,9 +259,18 @@
   function money(cents) { return currencyFmt.format(cents / 100); }
 
   // Colore del testo leggibile sopra uno sfondo colorato.
+  // Tinte per tema (solo disegno: i dati salvati non cambiano). Scuro: vive ma non sature. Chiaro: piu profonde, 3:1 sul bianco.
+  var TC = {"light": {"#f59e9e": "#EF6767", "#f7b27e": "#EC6E0F", "#f4d675": "#B78F0F", "#cbe08a": "#819D2A", "#9ed8a0": "#42A546", "#7fd6b8": "#35A67F", "#6fd0d4": "#32A2A6", "#7cc6f2": "#1B9CE8", "#7fa8f0": "#5F92EC", "#9cb6f7": "#6890F3", "#b6a9f0": "#9986EA", "#eba3d3": "#DE68B7", "#f2a0b8": "#EB6A90", "#afc0d6": "#7996BA", "#d98080": "#D77878", "#e0966a": "#D87B44", "#cdb052": "#AF9233", "#a9bd66": "#889D44", "#7fbb86": "#58A561", "#60b89b": "#48A284", "#55b3be": "#419EA9", "#5fa9d9": "#469CD3", "#5f8fd9": "#5F8FD9", "#5a84ce": "#5A84CE", "#8f82d6": "#8F82D6", "#cb86b8": "#C67BB2", "#d8869c": "#D3778F", "#8798b0": "#8495AE"}, "dark": {"#f59e9e": "#F47A86", "#f7b27e": "#F29C5A", "#f4d675": "#F1CA4D", "#cbe08a": "#B1D856", "#9ed8a0": "#57CE7F", "#7fd6b8": "#3CC9A0", "#6fd0d4": "#30C3CB", "#7cc6f2": "#4CB2F0", "#7fa8f0": "#679EF3", "#9cb6f7": "#85A7F5", "#b6a9f0": "#AA96F6", "#eba3d3": "#EE88CD", "#f2a0b8": "#F584AB", "#afc0d6": "#93A6C0", "#d98080": "#E46173", "#e0966a": "#E78544", "#cdb052": "#D5AE11", "#a9bd66": "#94C03A", "#7fbb86": "#3FB76D", "#60b89b": "#2AAD8A", "#55b3be": "#22ADBA", "#5fa9d9": "#399DE1", "#5f8fd9": "#4D86E7", "#5a84ce": "#568BE4", "#8f82d6": "#9176EB", "#cb86b8": "#D669B7", "#d8869c": "#E56B93", "#8798b0": "#768AA8"}};
+  var TC_LEGACY = {"#ef4444": "#f59e9e", "#f97316": "#f7b27e", "#f59e0b": "#f4d675", "#eab308": "#f4d675", "#84cc16": "#cbe08a", "#22c55e": "#9ed8a0", "#14b8a6": "#6fd0d4", "#06b6d4": "#7cc6f2", "#3b82f6": "#7fa8f0", "#6366f1": "#9cb6f7", "#8b5cf6": "#9cb6f7", "#d946ef": "#b6a9f0", "#ec4899": "#f2a0b8", "#64748b": "#afc0d6", "#b91c1c": "#d98080", "#c2410c": "#e0966a", "#b45309": "#cdb052", "#a16207": "#a9bd66", "#4d7c0f": "#7fbb86", "#15803d": "#60b89b", "#0f766e": "#55b3be", "#0e7490": "#5fa9d9", "#1d4ed8": "#5f8fd9", "#4338ca": "#9cb6f7", "#6d28d9": "#8f82d6", "#a21caf": "#cb86b8", "#be185d": "#d8869c", "#475569": "#8798b0", "#94a3b8": "#afc0d6", "#16a34a": "#7fd6b8"};
+  function tc(c) {
+    var k = String(c).toLowerCase(), t = TC[document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light'];
+    return t[k] || t[TC_LEGACY[k]] || c;
+  }
   function textOn(hex) {
-    var r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
-    return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.62 ? '#0f172a' : '#ffffff';
+    function lin(v) { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }
+    var L = 0.2126 * lin(parseInt(hex.slice(1, 3), 16)) + 0.7152 * lin(parseInt(hex.slice(3, 5), 16)) + 0.0722 * lin(parseInt(hex.slice(5, 7), 16));
+    var ink = 0.0101; // luminanza di #0C1A2E
+    return (L + 0.05) / (ink + 0.05) >= 1.05 / (L + 0.05) ? '#0C1A2E' : '#ffffff';
   }
 
   // Importo digitato sul tastierino ("12,5") in centesimi.
@@ -375,7 +396,7 @@
 
   // Il primo conto corrente: e il conto predefinito di ogni movimento.
   function makeAccount() {
-    return { id: uid(), sys: 'main', name: SYS.main.it, icon: '💳', color: '#4338ca', opening: 0, openingDate: '' };
+    return { id: uid(), sys: 'main', name: SYS.main.it, icon: '💳', color: '#9CB6F7', opening: 0, openingDate: '' };
   }
 
   function defaultData() {
@@ -384,22 +405,22 @@
       settings: { theme: 'auto', lang: 'it', lastBackup: '', backupSnooze: '', guideSeen: false, lastWallet: { expense: '', income: '', saving: '' } },
       accounts: [makeAccount()],
       categories: [
-        makeCat('expense', 'home', '🏠', '#6366f1'),
-        makeCat('expense', 'groceries', '🛒', '#22c55e'),
-        makeCat('expense', 'transport', '🚗', '#06b6d4'),
-        makeCat('expense', 'dining', '🍽️', '#f97316'),
-        makeCat('expense', 'health', '💊', '#ef4444'),
-        makeCat('expense', 'leisure', '🎉', '#d946ef'),
-        makeCat('expense', 'shopping', '👕', '#ec4899'),
-        makeCat('expense', 'bills', '💡', '#eab308'),
-        makeCat('income', 'salary', '💼', '#16a34a'),
-        makeCat('income', 'refunds', '🧾', '#14b8a6'),
-        makeCat('income', 'extra', '💶', '#84cc16')
+        makeCat('expense', 'home', '🏡', '#9CB6F7'),
+        makeCat('expense', 'groceries', '🥑', '#9ED8A0'),
+        makeCat('expense', 'transport', '🚌', '#7CC6F2'),
+        makeCat('expense', 'dining', '🍝', '#F7B27E'),
+        makeCat('expense', 'health', '🩺', '#F59E9E'),
+        makeCat('expense', 'leisure', '🎬', '#B6A9F0'),
+        makeCat('expense', 'shopping', '🛍️', '#F2A0B8'),
+        makeCat('expense', 'bills', '💡', '#F4D675'),
+        makeCat('income', 'salary', '💼', '#7FD6B8'),
+        makeCat('income', 'refunds', '🧾', '#6FD0D4'),
+        makeCat('income', 'extra', '🎁', '#CBE08A')
       ],
       destinations: [
-        { id: uid(), sys: 'deposit', name: SYS.deposit.it, icon: '🏦', color: '#3b82f6', opening: 0, spendable: false },
-        { id: uid(), sys: 'pension', name: SYS.pension.it, icon: '🧓', color: '#8b5cf6', opening: 0, spendable: false },
-        { id: uid(), sys: 'etf', name: SYS.etf.it, icon: '📈', color: '#06b6d4', opening: 0, spendable: false }
+        { id: uid(), sys: 'deposit', name: SYS.deposit.it, icon: '🏦', color: '#7FA8F0', opening: 0, spendable: false },
+        { id: uid(), sys: 'pension', name: SYS.pension.it, icon: '🌳', color: '#5F8FD9', opening: 0, spendable: false },
+        { id: uid(), sys: 'etf', name: SYS.etf.it, icon: '📈', color: '#55B3BE', opening: 0, spendable: false }
       ],
       transactions: []
     };
@@ -437,11 +458,11 @@
       var o = { id: refId(a.id) };
       if (a.sys === 'main' && !hasMain) { o.sys = 'main'; hasMain = true; }
       o.name = name(a.name || (o.sys ? SYS.main.it : ''));
-      o.icon = icon(a.icon || '💳'); o.color = color(a.color || '#4338ca');
+      o.icon = icon(a.icon || '💳'); o.color = color(a.color || '#9CB6F7');
       o.opening = cents(a.opening); o.openingDate = odate(a.openingDate);
       return o;
     });
-    if (!accounts.length) { accounts.push({ id: refId(), sys: 'main', name: SYS.main.it, icon: '💳', color: '#4338ca', opening: 0, openingDate: '' }); }
+    if (!accounts.length) { accounts.push({ id: refId(), sys: 'main', name: SYS.main.it, icon: '💳', color: '#9CB6F7', opening: 0, openingDate: '' }); }
     var defAcc = accounts[0].id;
 
     var categories = asArray(raw.categories).filter(function (c) {
@@ -752,7 +773,7 @@
   function catRow(it, total, showLimit) {
     var pct = total ? Math.round(it.amount * 100 / total) : 0;
     var s = '<button type="button" class="cat-row' + (ui.selected === it.id ? ' selected' : '') + '" data-action="sel-cat" data-ref="' + esc(it.id) + '">' +
-      '<span class="row-top"><span class="chip" style="background:' + it.color + ';color:' + textOn(it.color) + '">' + esc(it.icon) + '</span>' +
+      '<span class="row-top"><span class="chip" style=\"background:' + tc(it.color) + ';color:' + textOn(tc(it.color)) + '">' + esc(it.icon) + '</span>' +
       '<span class="row-name">' + esc(it.name) + '</span>' +
       '<span class="row-amt">' + money(it.amount) + '<small>' + pct + '%</small></span></span>';
     if (showLimit && it.limit) {
@@ -776,13 +797,15 @@
       var seg = Math.max(len - gap, 0.5);
       var sel = ui.selected === it.id;
       var pct = Math.round(it.amount * 100 / total);
-      circles += '<circle class="seg" data-action="sel-cat" data-ref="' + esc(it.id) + '" role="button" tabindex="0" aria-label="' + esc(it.name) + ' ' + pct + '%" cx="' + cx + '" cy="' + cy + '" r="' + R + '" fill="none" stroke="' + it.color +
+      circles += '<circle class="seg" data-action="sel-cat" data-ref="' + esc(it.id) + '" role="button" tabindex="0" aria-label="' + esc(it.name) + ' ' + pct + '%" cx="' + cx + '" cy="' + cy + '" r="' + R + '" fill="none" stroke="' + tc(it.color) +
         '" stroke-width="' + (sel ? 46 : 36) + '" stroke-dasharray="' + seg.toFixed(2) + ' ' + (C - seg).toFixed(2) + '" stroke-dashoffset="' + (-offset).toFixed(2) + '" transform="rotate(-90 130 130)"/>';
       if (it.amount / total >= 0.07) {
         var ang = (offset + len / 2) / C * 2 * Math.PI - Math.PI / 2;
-        var x = cx + R * Math.cos(ang), y = cy + R * Math.sin(ang), fg = textOn(it.color);
-        labels += '<text x="' + x.toFixed(1) + '" y="' + (y - 4).toFixed(1) + '" text-anchor="middle" dominant-baseline="central" font-size="16" fill="' + fg + '">' + esc(it.icon) + '</text>' +
-          '<text x="' + x.toFixed(1) + '" y="' + (y + 10).toFixed(1) + '" text-anchor="middle" dominant-baseline="central" font-size="9.5" fill="' + fg + '">' + pct + '%</text>';
+        var x = cx + R * Math.cos(ang), y = cy + R * Math.sin(ang), fg = textOn(tc(it.color));
+        var dk = document.documentElement.getAttribute('data-theme') === 'dark', pw = String(pct).length * 6.2 + 12;
+        labels += '<text x="' + x.toFixed(1) + '" y="' + (y - 8).toFixed(1) + '" text-anchor="middle" dominant-baseline="central" font-size="15" fill="' + fg + '">' + esc(it.icon) + '</text>' +
+          (dk ? '<rect x="' + (x - pw / 2).toFixed(1) + '" y="' + (y + 5).toFixed(1) + '" width="' + pw.toFixed(1) + '" height="13" rx="6.5" fill="#06142E" fill-opacity=".62"/>' : '') +
+          '<text x="' + x.toFixed(1) + '" y="' + (y + 11.5).toFixed(1) + '" text-anchor="middle" dominant-baseline="central" font-size="9.5" fill="' + (dk ? '#FFFFFF' : fg) + '">' + pct + '%</text>';
       }
       offset += len;
     });
@@ -852,14 +875,14 @@
   function renderHome() {
     var c = compute();
     var out = renderNotices() + '<section class="hero" aria-label="' + T('Saldo') + '">' +
-      '<div><span class="lbl">' + T('Saldo netto') + '</span><strong class="big' + (c.net < 0 ? ' neg' : '') + '">' + money(c.net) + '</strong><span class="hint">' + T('Entrate − Spese − Accantonamenti') + '</span></div>' +
-      '<div><span class="lbl">' + T('Risparmio totale') + '</span><strong class="mid' + (c.surplus < 0 ? ' neg' : '') + '">' + money(c.surplus) + '</strong><span class="hint">' + T('Entrate − Spese') + '</span></div></section>';
+      '<div class="hero-main"><span class="lbl">' + T('Saldo netto') + '</span><strong class="big' + (c.net < 0 ? ' neg' : '') + '">' + money(c.net) + '</strong><span class="hint">' + T('Entrate − Spese − Accantonamenti') + '</span>' +
+      '<div class="hero-pill"><span>' + T('Risparmio totale') + '</span><strong' + (c.surplus < 0 ? ' class="neg"' : '') + '>' + money(c.surplus) + '</strong></div></div></section>';
     out += '<section class="tiles" aria-label="' + T('Totali') + '">' + tile('income', 'Entrate', c.income) + tile('expense', 'Spese', c.expense) + tile('saving', 'Accantonato', c.saved) + '</section>';
 
     if (c.savItems.length) {
       out += '<section class="panel"><h2>' + T('Accantonato per destinazione') + '</h2>';
       c.savItems.forEach(function (it) {
-        out += '<div class="dest-row"><span class="chip" style="background:' + it.color + ';color:' + textOn(it.color) + '">' + esc(it.icon) + '</span><span class="name">' + esc(it.name) + '</span><span class="amt">' + money(it.amount) + '</span></div>';
+        out += '<div class="dest-row"><span class="chip" style=\"background:' + tc(it.color) + ';color:' + textOn(tc(it.color)) + '">' + esc(it.icon) + '</span><span class="name">' + esc(it.name) + '</span><span class="amt">' + money(it.amount) + '</span></div>';
       });
       out += '</section>';
     }
@@ -867,7 +890,7 @@
     if (c.fundItems.length) {
       out += '<section class="panel"><h2>' + T('Spese pagate dai fondi') + '</h2>';
       c.fundItems.forEach(function (it) {
-        out += '<div class="dest-row"><span class="chip" style="background:' + it.color + ';color:' + textOn(it.color) + '">' + esc(it.icon) + '</span><span class="name">' + esc(it.name) + '</span><span class="amt out">' + money(it.amount) + '</span></div>';
+        out += '<div class="dest-row"><span class="chip" style=\"background:' + tc(it.color) + ';color:' + textOn(tc(it.color)) + '">' + esc(it.icon) + '</span><span class="name">' + esc(it.name) + '</span><span class="amt out">' + money(it.amount) + '</span></div>';
       });
       out += '<p class="hint">' + T('Non incidono su Spese e Saldo netto del periodo.') + '</p></section>';
     }
@@ -876,7 +899,7 @@
     c.expItems.forEach(function (it) { if (it.id === ui.selected) { sel = it; } });
     if (!sel) { ui.selected = null; }
 
-    out += '<section class="panel"><h2>' + T('Distribuzione delle spese') + '</h2><div class="donut-wrap">' + donut(c.expItems, c.expense) + '<div class="donut-center">';
+    out += '<section class="panel panel-donut"><h2>' + T('Distribuzione delle spese') + '</h2><div class="donut-wrap">' + donut(c.expItems, c.expense) + '<div class="donut-center">';
     if (sel) {
       out += '<span class="dc-icon">' + esc(sel.icon) + '</span><span class="dc-name">' + esc(sel.name) + '</span><span class="dc-amt">' + money(sel.amount) + '</span><span class="dc-sub">' + Math.round(sel.amount * 100 / c.expense) + T('% delle spese') + '</span>';
     } else if (c.expense) {
@@ -923,7 +946,7 @@
     var from = srcLabel(t);
     var sub = (showDate ? fmtDate(t.date) + ' · ' : '') + (t.note || typeLabel(t.type)) + (from ? ' · ' + from : '');
     return '<button type="button" class="tx-row" data-action="edit-tx" data-id="' + esc(t.id) + '">' +
-      '<span class="chip" style="background:' + ref.color + ';color:' + textOn(ref.color) + '">' + esc(ref.icon) + '</span>' +
+      '<span class="chip" style=\"background:' + tc(ref.color) + ';color:' + textOn(tc(ref.color)) + '">' + esc(ref.icon) + '</span>' +
       '<span class="tx-main"><b>' + esc(nm(ref)) + '</b><small>' + esc(sub) + '</small></span>' +
       '<span class="tx-amt ' + t.type + '">' + sign + ' ' + money(t.amount) + '</span></button>';
   }
@@ -989,7 +1012,7 @@
     var out = '<h2 class="section-title">' + title + '</h2><div class="list-card">';
     items.forEach(function (c, idx) {
       var sub = kind === 'expense' ? (c.limit ? T('Limite mensile {l}', { l: money(c.limit) }) : T('Nessun limite')) : kind === 'income' ? T('Entrata') : T('Destinazione') + (c.spendable ? ' · ' + T('per spese') : '');
-      var chip = '<span class="chip" style="background:' + c.color + ';color:' + textOn(c.color) + '">' + esc(c.icon) + '</span>';
+      var chip = '<span class="chip" style=\"background:' + tc(c.color) + ';color:' + textOn(tc(c.color)) + '">' + esc(c.icon) + '</span>';
       var name = '<span class="grow"><b>' + esc(nm(c)) + '</b><small>' + sub + '</small></span>';
       if (ui.reorder) {
         var base = ' data-action="cat-move" data-kind="' + kind + '" data-id="' + esc(c.id) + '"';
@@ -1017,7 +1040,7 @@
   function wealthRow(ref, bal, flows, attrs) {
     var sub = (bal.balance < 0 ? '⚠️ ' + T('In negativo') + ' · ' : '') + flows;
     return '<button type="button" class="item-row" ' + attrs + '>' +
-      '<span class="chip" style="background:' + ref.color + ';color:' + textOn(ref.color) + '">' + esc(ref.icon) + '</span>' +
+      '<span class="chip" style=\"background:' + tc(ref.color) + ';color:' + textOn(tc(ref.color)) + '">' + esc(ref.icon) + '</span>' +
       '<span class="grow"><b>' + esc(nm(ref)) + '</b><small>' + esc(sub) + '</small></span>' +
       balCell(bal.balance) + '<span class="chev" aria-hidden="true">›</span></button>';
   }
@@ -1028,8 +1051,8 @@
     Object.keys(b).forEach(function (k) { total += b[k].balance; if (findFund(k)) { funds += b[k].balance; } });
     var out = '<h2 class="section-title">' + T('Sintesi Patrimonio') + '</h2>' +
       '<section class="hero" aria-label="' + T('Sintesi Patrimonio') + '">' +
-      '<div><span class="lbl">' + T('Patrimonio totale') + '</span><strong class="big' + (total < 0 ? ' neg' : '') + '">' + money(total) + '</strong><span class="hint">' + T('Conto più fondi. I trasferimenti non lo cambiano.') + '</span></div>' +
-      '<div><span class="lbl">' + T('Nei fondi e risparmi') + '</span><strong class="mid' + (funds < 0 ? ' neg' : '') + '">' + money(funds) + '</strong></div></section>';
+      '<div class="hero-main"><span class="lbl">' + T('Patrimonio totale') + '</span><strong class="big' + (total < 0 ? ' neg' : '') + '">' + money(total) + '</strong><span class="hint">' + T('Conto più fondi. I trasferimenti non lo cambiano.') + '</span>' +
+      '<div class="hero-pill"><span>' + T('Nei fondi e risparmi') + '</span><strong' + (funds < 0 ? ' class="neg"' : '') + '>' + money(funds) + '</strong></div></div></section>';
     out += '<h2 class="section-title">' + T('Conti') + '</h2><div class="list-card">';
     db.accounts.forEach(function (a) {
       var s = b[a.id];
@@ -1089,7 +1112,7 @@
     var dark = t === 'dark' || (t === 'auto' && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
     document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
     var meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) { meta.setAttribute('content', dark ? '#0b1020' : '#f4f6fb'); }
+    if (meta) { meta.setAttribute('content', dark ? '#0A1F45' : '#EAF1FA'); }
     var btn = $('#theme-btn');
     if (btn) { btn.textContent = dark ? '☀️' : '🌙'; }
   }
@@ -1115,6 +1138,7 @@
     applyTheme();
     var html = ui.tab === 'home' ? renderHome() : ui.tab === 'list' ? renderList() : ui.tab === 'wealth' ? renderWealth() : ui.tab === 'cats' ? renderCats() : renderSettings();
     $('#view').innerHTML = html;
+    $('#view').setAttribute('data-tab', ui.tab);
     if (ui.tab === 'settings') { updateStorageInfo(); }
   }
 
@@ -1164,7 +1188,7 @@
     }
     refs.forEach(function (r) {
       h += '<button type="button" class="cat-tile' + (entry.refId === r.id ? ' on' : '') + '" data-action="pick-ref" data-ref="' + esc(r.id) + '">' +
-        '<span class="ci" style="background:' + r.color + ';color:' + textOn(r.color) + '">' + esc(r.icon) + '</span><span class="cn">' + esc(nm(r)) + '</span></button>';
+        '<span class="ci" style=\"background:' + tc(r.color) + ';color:' + textOn(tc(r.color)) + '">' + esc(r.icon) + '</span><span class="cn">' + esc(nm(r)) + '</span></button>';
     });
     return h;
   }
@@ -1244,7 +1268,7 @@
     opts.forEach(function (o) {
       var bal = b[o.id] ? b[o.id].balance : 0, on = entry.wal === o.id;
       h += '<button type="button" class="src-chip' + (on ? ' on' : '') + '" data-action="pick-src" data-src="' + esc(o.id) + '" aria-pressed="' + on + '">' +
-        '<span class="si" style="background:' + o.ref.color + ';color:' + textOn(o.ref.color) + '">' + esc(o.ref.icon) + '</span>' +
+        '<span class="si" style=\"background:' + tc(o.ref.color) + ';color:' + textOn(tc(o.ref.color)) + '">' + esc(o.ref.icon) + '</span>' +
         '<span class="st"><span class="sn">' + esc(nm(o.ref)) + '</span><small class="' + (bal < 0 ? 'neg' : '') + '">' + money(bal) + '</small></span></button>';
     });
     return h + '</div>';
@@ -1414,9 +1438,12 @@
       '<label class="field-label" for="ed-name">' + T('Nome') + '</label><input class="field-input" id="ed-name" type="text" maxlength="30" value="' + esc(ex ? nm(ex) : '') + '" autocomplete="off">' +
       '<label class="field-label" for="ed-icon">' + T('Icona o emoji') + '</label><input class="field-input" id="ed-icon" type="text" maxlength="8" value="' + esc(editor.icon) + '" autocomplete="off">' +
       '<div class="emoji-grid">';
-    EMOJIS.forEach(function (e) { h += '<button type="button" data-action="emoji-pick" data-e="' + e + '" aria-label="' + T('Icona {e}', { e: e }) + '">' + e + '</button>'; });
+    groupsFor(kind).forEach(function (g) {
+      h += '<span class="emoji-group">' + g[lang] + '</span>';
+      g.list.forEach(function (e) { h += '<button type="button" data-action="emoji-pick" data-e="' + e + '" aria-label="' + T('Icona {e}', { e: e }) + '">' + e + '</button>'; });
+    });
     h += '</div><span class="field-label">' + T('Colore') + '</span><div class="swatches">';
-    COLORS.forEach(function (c) { h += '<button type="button" data-action="color-pick" data-c="' + c + '" class="' + (c === editor.color ? 'on' : '') + '" style="background:' + c + '" aria-label="' + T('Colore {c}', { c: c }) + '"></button>'; });
+    COLORS.forEach(function (c) { h += '<button type="button" data-action="color-pick" data-c="' + c + '" class="' + (c === editor.color ? 'on' : '') + '" style="background:' + tc(c) + '" aria-label="' + T('Colore {c}', { c: c }) + '"></button>'; });
     h += '<label class="swatch-custom"><input type="color" id="ed-color" value="' + editor.color + '" aria-label="' + T('Colore personalizzato') + '"><span aria-hidden="true">🎨</span></label></div>';
     if (kind === 'expense') {
       h += '<label class="field-label" for="ed-limit">' + T('Limite di spesa mensile in euro (facoltativo)') + '</label><input class="field-input" id="ed-limit" type="text" inputmode="decimal" placeholder="' + T('Nessun limite') + '" value="' + (ex && ex.limit ? centsToStr(ex.limit).replace(',', DEC) : '') + '" autocomplete="off">';
