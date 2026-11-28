@@ -169,7 +169,9 @@
     'Nuovo salvadanaio': 'New piggy bank', 'Modifica salvadanaio': 'Edit piggy bank', '+ Aggiungi salvadanaio': '+ Add piggy bank',
     'Salvadanaio': 'Piggy bank', 'Disponibile {a} · Salvadanai {b}': 'Available {a} · Piggy banks {b}',
     'Nei salvadanai': 'In piggy banks',
-    'Parte del saldo del conto messa da parte. Resta liquidità e fa parte del conto, ma non è nel disponibile. Vale la data del saldo iniziale del conto.': 'Part of the account balance set aside. It stays liquid cash inside the account but is not in the available amount. The account opening date applies.',
+    'Parte del saldo del conto messa da parte. Resta liquidità e fa parte del conto, ma non è nel disponibile. Non va sotto zero: se non basta, il resto esce dal conto. Vale la data del saldo iniziale del conto.': 'Part of the account balance set aside. It stays liquid cash inside the account but is not in the available amount. It never goes below zero: if it is not enough, the rest comes out of the account. The account opening date applies.',
+    '⚠️ Credito del salvadanaio insufficiente: {m} presi dal conto.': '⚠️ Not enough credit in the piggy bank: {m} taken from the account.',
+    'Il saldo del salvadanaio non può essere negativo.': 'The piggy bank balance cannot be negative.',
     'Saldo iniziale del salvadanaio in euro (facoltativo)': 'Piggy bank opening balance in euro (optional)',
     ' Il saldo del salvadanaio ({b}) torna nel conto e i movimenti passano al conto.': ' The piggy bank balance ({b}) goes back to the account and its transactions move to the account.',
     ' Verranno eliminati anche i suoi {n} salvadanai.': ' Its {n} piggy banks will be deleted too.'
@@ -501,7 +503,7 @@
       return {
         id: refId(p.id),
         accountId: accounts.some(function (a) { return a.id === p.accountId; }) ? p.accountId : defAcc,
-        name: name(p.name), icon: icon(p.icon || '🐷'), color: color(p.color || '#9CB6F7'), opening: cents(p.opening)
+        name: name(p.name), icon: icon(p.icon || '🐷'), color: color(p.color || '#9CB6F7'), opening: Math.max(0, cents(p.opening))
       };
     });
 
@@ -668,7 +670,10 @@
 
   // Saldi di conti e fondi. I saldi possono andare sotto zero. Un conto o un fondo eliminato non conta piu.
   // Il saldo iniziale vale alla sua data: i movimenti fino a quel giorno (incluso) ci sono gia dentro.
-  function balances() {
+  // Un salvadanaio non va sotto zero: se non basta, va a zero e il resto esce dalla parte libera del conto.
+  // I movimenti si rileggono in ordine di data, cosi il risultato non dipende da quando li hai inseriti.
+  // sf (facoltativo) raccoglie, per ogni movimento, quanto e stato preso dal conto perche il salvadanaio non bastava.
+  function balances(sf) {
     var b = {};
     function slot(w) { b[w.id] = { opening: w.opening, date: w.openingDate || '', inn: 0, out: 0, balance: w.opening }; }
     function move(id, t, dir) {
@@ -684,9 +689,27 @@
       var a = findAccount(p.accountId);
       b[p.id] = { opening: p.opening, date: a ? a.openingDate || '' : '', inn: 0, out: 0, balance: p.opening };
     });
-    db.transactions.forEach(function (t) {
+    var order = db.transactions.map(function (t, i) { return { t: t, i: i }; }).sort(function (x, y) {
+      if (x.t.date !== y.t.date) { return x.t.date < y.t.date ? -1 : 1; }
+      return (x.t.createdAt - y.t.createdAt) || (x.i - y.i);
+    });
+    order.forEach(function (o) {
+      var t = o.t, from, pk, s0, take, rest, acc;
       if (t.type === 'income') { move(dstOf(t), t, 1); return; }
-      move(srcOf(t), t, -1);
+      from = srcOf(t); pk = findPocket(from);
+      if (pk) {
+        s0 = b[from];
+        if (s0 && !(s0.date && t.date <= s0.date)) {
+          take = Math.min(t.amount, Math.max(s0.balance, 0));
+          rest = t.amount - take;
+          s0.out += take; s0.balance -= take;
+          acc = b[pk.accountId];
+          if (rest > 0) {
+            if (sf) { sf[t.id] = rest; }
+            if (acc) { acc.out += rest; acc.balance -= rest; }
+          }
+        }
+      } else { move(from, t, -1); }
       if (t.type === 'saving' && t.refId) { move(t.refId, t, 1); }
     });
     return b;
@@ -1386,7 +1409,7 @@
     }
     var wasEdit = entry.mode === 'edit';
     // Un fondo o il conto che passa sotto zero con questo movimento: avviso, ma il movimento resta.
-    var after = balances(), negMsg = null;
+    var sf = {}, after = balances(sf), negMsg = null, shortMsg = null;
     var from = srcOf(tx), negs = [];
     if (tx.type !== 'income' && before[from]) {
       var chk = [from], pf = findPocket(from);
@@ -1397,6 +1420,7 @@
       });
       if (negs.length) { negMsg = negs.join(' '); }
     }
+    if (sf[tx.id]) { shortMsg = T('⚠️ Credito del salvadanaio insufficiente: {m} presi dal conto.', { m: money(sf[tx.id]) }); }
     db.settings.lastWallet[tx.type] = entry.wal;
     var saved = save();
     ui.year = +tx.date.slice(0, 4);
@@ -1405,8 +1429,9 @@
     closeSheet();
     render();
     if (alertInfo) { toast(alertInfo.text, alertInfo.level); }
+    if (shortMsg) { toast(shortMsg, 'warn'); }
     if (negMsg) { toast(negMsg, 'warn'); }
-    if (!alertInfo && !negMsg && (saved || memoryOnly)) { toast(wasEdit ? T('Modifica salvata: {m}', { m: money(cents) }) : T(ADDED[tx.type], { m: money(cents) }), 'ok'); }
+    if (!alertInfo && !negMsg && !shortMsg && (saved || memoryOnly)) { toast(wasEdit ? T('Modifica salvata: {m}', { m: money(cents) }) : T(ADDED[tx.type], { m: money(cents) }), 'ok'); }
   }
 
   // Un foglio aperto: blocca lo sfondo, ricorda dove era il focus, aggiunge una voce di cronologia
@@ -1531,7 +1556,7 @@
     }
     if (kind === 'pocket') {
       h += '<label class="field-label" for="ed-opening">' + T('Saldo iniziale del salvadanaio in euro (facoltativo)') + '</label><input class="field-input" id="ed-opening" type="text" inputmode="decimal" placeholder="0" value="' + (ex && ex.opening ? signedStr(ex.opening) : '') + '" autocomplete="off">' +
-        '<p class="hint">' + T('Parte del saldo del conto messa da parte. Resta liquidità e fa parte del conto, ma non è nel disponibile. Vale la data del saldo iniziale del conto.') + '</p>';
+        '<p class="hint">' + T('Parte del saldo del conto messa da parte. Resta liquidità e fa parte del conto, ma non è nel disponibile. Non va sotto zero: se non basta, il resto esce dal conto. Vale la data del saldo iniziale del conto.') + '</p>';
     }
     if (kind === 'saving') {
       h += '<label class="check-row"><input type="checkbox" id="ed-spend"' + (!ex || ex.spendable ? ' checked' : '') + '><span>' + T('Usabile per pagare spese') + '</span></label>';
@@ -1559,6 +1584,7 @@
     if (editor.kind === 'saving' || editor.kind === 'account' || editor.kind === 'pocket') {
       opening = parseOpening($('#ed-opening').value);
       if (isNaN(opening)) { err.textContent = T('Il saldo iniziale non è valido.'); return; }
+      if (editor.kind === 'pocket' && opening < 0) { err.textContent = T('Il saldo del salvadanaio non può essere negativo.'); return; }
     }
     var odate = '';
     if (editor.kind === 'saving' || editor.kind === 'account') {
