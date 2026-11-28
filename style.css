@@ -1072,3 +1072,6 @@ body.no-actions #view { padding-bottom: calc(var(--tab-h) + var(--safe-b) + 24px
 .add-btn.pocket-add { min-height: 40px; font-size: 14px; padding-left: 34px; text-align: left; opacity: .85; }
 .src-chip .st .sa { display: block; color: var(--text-muted); font-size: 11px; }
 .tx-main small.tx-warn { color: var(--over); font-weight: 600; white-space: normal; }
+
+/* v1.6: movimenti della categoria aperti sotto la riga */
+.cat-tx { margin: -2px 0 6px 10px; border-radius: 16px; overflow: hidden; }

@@ -171,6 +171,7 @@
     'Nei salvadanai': 'In piggy banks',
     'Parte del saldo del conto messa da parte. Resta liquidità e fa parte del conto, ma non è nel disponibile. Non va sotto zero: se non basta, il resto esce dal conto. Vale la data del saldo iniziale del conto.': 'Part of the account balance set aside. It stays liquid cash inside the account but is not in the available amount. It never goes below zero: if it is not enough, the rest comes out of the account. The account opening date applies.',
     '⚠️ Salvadanaio “{n}” non sufficiente a coprire la spesa: {m} presi dal conto.': '⚠️ Piggy bank “{n}” not enough to cover the payment: {m} taken from the account.',
+    'Movimenti della categoria': 'Category transactions',
     '⚠️ Credito del salvadanaio insufficiente: {m} presi dal conto.': '⚠️ Not enough credit in the piggy bank: {m} taken from the account.',
     'Il saldo del salvadanaio non può essere negativo.': 'The piggy bank balance cannot be negative.',
     'Saldo iniziale del salvadanaio in euro (facoltativo)': 'Piggy bank opening balance in euro (optional)',
@@ -845,9 +846,20 @@
     return T('{a} su {l} · {p}%', { a: money(it.amount), l: money(it.limit), p: pct });
   }
 
+  // Movimenti del periodo che compongono una categoria di spesa (stessi criteri dei totali).
+  function catTxList(id) {
+    var txs = sortedTx(db.transactions.filter(function (t) {
+      if (!inPeriod(t)) { return false; }
+      return flowParts(t).some(function (p) { return p.k === 'expense' && p.key === id; });
+    }));
+    if (!txs.length) { return ''; }
+    return '<div class="tx-group cat-tx" role="region" aria-label="' + esc(T('Movimenti della categoria')) + '">' +
+      txs.map(function (t) { return txRow(t, true); }).join('') + '</div>';
+  }
+
   function catRow(it, total, showLimit) {
     var pct = total ? Math.round(it.amount * 100 / total) : 0;
-    var s = '<button type="button" class="cat-row' + (ui.selected === it.id ? ' selected' : '') + '" data-action="sel-cat" data-ref="' + esc(it.id) + '">' +
+    var s = '<button type="button" class="cat-row' + (ui.selected === it.id ? ' selected' : '') + '" data-action="sel-cat" data-ref="' + esc(it.id) + '" aria-expanded="' + (ui.selected === it.id) + '">' +
       '<span class="row-top"><span class="chip" style=\"background:' + tc(it.color) + ';color:' + textOn(tc(it.color)) + '">' + esc(it.icon) + '</span>' +
       '<span class="row-name">' + esc(it.name) + '</span>' +
       '<span class="row-amt">' + money(it.amount) + '<small>' + pct + '%</small></span></span>';
@@ -986,7 +998,10 @@
 
     if (c.expItems.length) {
       out += '<div class="cat-list">';
-      c.expItems.forEach(function (it) { out += catRow(it, c.expense, ui.mode === 'month'); });
+      c.expItems.forEach(function (it) {
+        out += catRow(it, c.expense, ui.mode === 'month');
+        if (ui.selected === it.id) { out += catTxList(it.id); }
+      });
       out += '</div>';
     } else {
       out += '<p class="empty">' + T('Usa “− Spesa” per registrare la prima spesa.') + '</p>';
