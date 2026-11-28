@@ -1,4 +1,4 @@
-/* SPET 1.5.0 - Simple Personal Expense Tracker
+/* SPET 1.6.0 - Simple Personal Expense Tracker
  * App a pagina singola. Nessuna dipendenza, nessun server.
  * Dati in localStorage, importi in centesimi interi, date come YYYY-MM-DD locali. */
 (function () {
@@ -6,10 +6,10 @@
 
   // ---------------------------------------------------------------- costanti
 
-  var APP_VERSION = '1.5.0';
+  var APP_VERSION = '1.6.0';
   var STORAGE_KEY = 'spet:data';
   var LEGACY_KEY = 'wealthtrack:data'; // nome della prima versione: serve solo a migrare i dati
-  var DB_VERSION = 3;
+  var DB_VERSION = 4;
   // Destinazioni predefinite: non pagano spese finche l utente non lo sceglie.
   var LOCKED_SYS = ['deposit', 'pension', 'etf'];
   var MONTHS_SHORT = { it: ['G', 'F', 'M', 'A', 'M', 'G', 'L', 'A', 'S', 'O', 'N', 'D'], en: ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'] };
@@ -28,7 +28,7 @@
     { id: 'work', it: 'Lavoro, studio e servizi', en: 'Work, study & services', list: ['💼', '🖥️', '💻', '📱', '🎓', '📖', '✏️', '🧾', '📄', '📮', '🖨️', '📺'] },
     { id: 'finance', it: 'Finanza e risparmio', en: 'Finance & savings', list: ['💶', '💰', '🏦', '🪙', '💳', '📈', '📊', '🧓', '🏆', '🎯', '🛡️', '⚖️', '🧮', '🏧', '💸', '🤝', '🌱', '📑', '🔐', '⭐'] }
   ];
-  var GROUP_FIRST = { expense: [], income: ['finance', 'work'], saving: ['finance'], account: ['finance'] };
+  var GROUP_FIRST = { expense: [], income: ['finance', 'work'], saving: ['finance'], account: ['finance'], pocket: ['finance'] };
   function groupsFor(kind) {
     var first = GROUP_FIRST[kind] || [];
     var head = [], tail = [];
@@ -164,7 +164,19 @@
     'La data non è valida.': 'The date is not valid.',
     ' Il movimento collegato non incide più sui saldi.': ' The linked transaction no longer affects balances.',
     ' I {u} movimenti collegati non incidono più sui saldi.': ' The {u} linked transactions no longer affect balances.',
-    'Nessun altro conto o fondo. Aggiungine uno dal tab Sintesi.': 'No other account or fund. Add one from the Overview tab.'
+    'Nessun altro conto o fondo. Aggiungine uno dal tab Sintesi.': 'No other account or fund. Add one from the Overview tab.',
+    // v1.6: salvadanai dentro i conti
+    'Nuovo salvadanaio': 'New piggy bank', 'Modifica salvadanaio': 'Edit piggy bank', '+ Aggiungi salvadanaio': '+ Add piggy bank',
+    'Salvadanaio': 'Piggy bank', 'Disponibile {a} · Salvadanai {b}': 'Available {a} · Piggy banks {b}',
+    'Nei salvadanai': 'In piggy banks',
+    'Parte del saldo del conto messa da parte. Resta liquidità e fa parte del conto, ma non è nel disponibile. Non va sotto zero: se non basta, il resto esce dal conto. Vale la data del saldo iniziale del conto.': 'Part of the account balance set aside. It stays liquid cash inside the account but is not in the available amount. It never goes below zero: if it is not enough, the rest comes out of the account. The account opening date applies.',
+    '⚠️ Salvadanaio “{n}” non sufficiente a coprire la spesa: {m} presi dal conto.': '⚠️ Piggy bank “{n}” not enough to cover the payment: {m} taken from the account.',
+    'Movimenti della categoria': 'Category transactions',
+    '⚠️ Credito del salvadanaio insufficiente: {m} presi dal conto.': '⚠️ Not enough credit in the piggy bank: {m} taken from the account.',
+    'Il saldo del salvadanaio non può essere negativo.': 'The piggy bank balance cannot be negative.',
+    'Saldo iniziale del salvadanaio in euro (facoltativo)': 'Piggy bank opening balance in euro (optional)',
+    ' Il saldo del salvadanaio ({b}) torna nel conto e i movimenti passano al conto.': ' The piggy bank balance ({b}) goes back to the account and its transactions move to the account.',
+    ' Verranno eliminati anche i suoi {n} salvadanai.': ' Its {n} piggy banks will be deleted too.'
   };
 
   // Nomi delle voci predefinite: restano tradotti finche l'utente non li rinomina.
@@ -422,6 +434,7 @@
         { id: uid(), sys: 'pension', name: SYS.pension.it, icon: '🌳', color: '#5F8FD9', opening: 0, spendable: false },
         { id: uid(), sys: 'etf', name: SYS.etf.it, icon: '📈', color: '#55B3BE', opening: 0, spendable: false }
       ],
+      pockets: [],
       transactions: []
     };
   }
@@ -435,7 +448,8 @@
     // v1 -> v2: saldi iniziali e fonte dei movimenti prendono i valori predefiniti qui sotto.
     // v2 -> v3: il conto unico raw.account diventa il primo di raw.accounts. I movimenti senza
     // fonte passano da quel conto, e le entrate vi arrivano.
-    // Migrazioni future: if (v < 4) { ... }
+    // v3 -> v4: nascono i salvadanai (raw.pockets), vuoti nei dati vecchi.
+    // Migrazioni future: if (v < 5) { ... }
 
     var refSeen = {}, txSeen = {};
     function refId(id) {
@@ -487,6 +501,14 @@
       return o;
     });
 
+    var pockets = asArray(raw.pockets).filter(function (p) { return p && typeof p === 'object'; }).slice(0, 100).map(function (p) {
+      return {
+        id: refId(p.id),
+        accountId: accounts.some(function (a) { return a.id === p.accountId; }) ? p.accountId : defAcc,
+        name: name(p.name), icon: icon(p.icon || '🐷'), color: color(p.color || '#9CB6F7'), opening: Math.max(0, cents(p.opening))
+      };
+    });
+
     var transactions = asArray(raw.transactions).filter(function (t) {
       return t && TYPE_LABEL[t.type] && isValidISO(t.date) && Math.round(Number(t.amount)) > 0 && Math.round(Number(t.amount)) < 1e11;
     }).map(function (t) {
@@ -514,7 +536,7 @@
         guideSeen: st.guideSeen === true,
         lastWallet: { expense: wid(lw.expense), income: wid(lw.income), saving: wid(lw.saving) }
       },
-      accounts: accounts, categories: categories, destinations: destinations, transactions: transactions
+      accounts: accounts, pockets: pockets, categories: categories, destinations: destinations, transactions: transactions
     };
   }
 
@@ -579,7 +601,7 @@
   }
 
   function findRef(id, type) {
-    var list = type === 'saving' ? db.destinations.concat(db.accounts) : db.categories;
+    var list = type === 'saving' ? db.destinations.concat(db.accounts, db.pockets) : db.categories;
     for (var i = 0; i < list.length; i++) { if (list[i].id === id) { return list[i]; } }
     return null;
   }
@@ -593,9 +615,19 @@
     for (var i = 0; i < db.destinations.length; i++) { if (db.destinations[i].id === id) { return db.destinations[i]; } }
     return null;
   }
-  function walletsAll() { return db.accounts.concat(db.destinations); }
+  function findPocket(id) {
+    for (var i = 0; i < db.pockets.length; i++) { if (db.pockets[i].id === id) { return db.pockets[i]; } }
+    return null;
+  }
+  function pocketsOf(accId) { return db.pockets.filter(function (p) { return p.accountId === accId; }); }
+  // Conti con i loro salvadanai subito dopo, poi i fondi.
+  function walletsAll() {
+    var out = [];
+    db.accounts.forEach(function (a) { out.push(a); pocketsOf(a.id).forEach(function (p) { out.push(p); }); });
+    return out.concat(db.destinations);
+  }
   function walletName(id) {
-    var w = findAccount(id) || findFund(id);
+    var w = findAccount(id) || findPocket(id) || findFund(id);
     return w ? nm(w) : T('Eliminata');
   }
 
@@ -607,7 +639,7 @@
   // Testo con il conto o il fondo coinvolto. Compare solo quando serve: piu conti oppure un fondo.
   function srcLabel(t) {
     var id = t.type === 'income' ? dstOf(t) : srcOf(t);
-    if (db.accounts.length < 2 && !findFund(id)) { return ''; }
+    if (db.accounts.length < 2 && !findFund(id) && !findPocket(id)) { return ''; }
     return T(t.type === 'income' ? 'su {n}' : 'da {n}', { n: walletName(id) });
   }
 
@@ -635,12 +667,15 @@
     if (findFund(srcOf(t))) { return []; }
     df = findFund(t.refId);
     if (df) { return [{ k: 'saved', key: df.id }]; }
-    return findAccount(t.refId) ? [] : [{ k: 'saved', key: NONE_REF.id }];
+    return findAccount(t.refId) || findPocket(t.refId) ? [] : [{ k: 'saved', key: NONE_REF.id }];
   }
 
   // Saldi di conti e fondi. I saldi possono andare sotto zero. Un conto o un fondo eliminato non conta piu.
   // Il saldo iniziale vale alla sua data: i movimenti fino a quel giorno (incluso) ci sono gia dentro.
-  function balances() {
+  // Un salvadanaio non va sotto zero: se non basta, va a zero e il resto esce dalla parte libera del conto.
+  // I movimenti si rileggono in ordine di data, cosi il risultato non dipende da quando li hai inseriti.
+  // sf (facoltativo) raccoglie, per ogni movimento, quanto e stato preso dal conto perche il salvadanaio non bastava.
+  function balances(sf) {
     var b = {};
     function slot(w) { b[w.id] = { opening: w.opening, date: w.openingDate || '', inn: 0, out: 0, balance: w.opening }; }
     function move(id, t, dir) {
@@ -651,20 +686,61 @@
     }
     db.accounts.forEach(slot);
     db.destinations.forEach(slot);
-    db.transactions.forEach(function (t) {
+    // Un salvadanaio e una parte del conto: stessa data del saldo iniziale.
+    db.pockets.forEach(function (p) {
+      var a = findAccount(p.accountId);
+      b[p.id] = { opening: p.opening, date: a ? a.openingDate || '' : '', inn: 0, out: 0, balance: p.opening };
+    });
+    var order = db.transactions.map(function (t, i) { return { t: t, i: i }; }).sort(function (x, y) {
+      if (x.t.date !== y.t.date) { return x.t.date < y.t.date ? -1 : 1; }
+      return (x.t.createdAt - y.t.createdAt) || (x.i - y.i);
+    });
+    order.forEach(function (o) {
+      var t = o.t, from, pk, s0, take, rest, acc;
       if (t.type === 'income') { move(dstOf(t), t, 1); return; }
-      move(srcOf(t), t, -1);
+      from = srcOf(t); pk = findPocket(from);
+      if (pk) {
+        s0 = b[from];
+        if (s0 && !(s0.date && t.date <= s0.date)) {
+          take = Math.min(t.amount, Math.max(s0.balance, 0));
+          rest = t.amount - take;
+          s0.out += take; s0.balance -= take;
+          acc = b[pk.accountId];
+          if (rest > 0) {
+            if (sf) { sf[t.id] = rest; }
+            if (acc) { acc.out += rest; acc.balance -= rest; }
+          }
+        }
+      } else { move(from, t, -1); }
       if (t.type === 'saving' && t.refId) { move(t.refId, t, 1); }
     });
     return b;
   }
 
+  // Conto con salvadanai. Il saldo del conto da solo e la parte libera.
+  // Totale = libero + salvadanai. Disponibile = libero + i salvadanai in rosso, che il conto copre.
+  function totalOf(accId, b) {
+    var v = b[accId].balance;
+    pocketsOf(accId).forEach(function (p) { v += b[p.id].balance; });
+    return v;
+  }
+  function availOf(accId, b) {
+    var v = b[accId].balance;
+    pocketsOf(accId).forEach(function (p) { if (b[p.id].balance < 0) { v += b[p.id].balance; } });
+    return v;
+  }
+  // Livello da confrontare con lo zero: il disponibile per un conto, il saldo per il resto.
+  function levelOf(id, b) {
+    if (!b[id]) { return 0; }
+    return findAccount(id) ? availOf(id, b) : b[id].balance;
+  }
+
   // Colore nuovo: il primo della palette non usato, poi tinte generate senza fine.
   function nextColor() {
     var used = {};
-    db.categories.concat(db.destinations, db.accounts).forEach(function (x) { used[String(x.color).toLowerCase()] = 1; });
+    db.categories.concat(db.destinations, db.accounts, db.pockets).forEach(function (x) { used[String(x.color).toLowerCase()] = 1; });
     for (var i = 0; i < COLORS.length; i++) { if (!used[COLORS[i]]) { return COLORS[i]; } }
-    return hslToHex(Math.round(((db.categories.length + db.destinations.length + db.accounts.length) * 137.508) % 360), 62, 46);
+    return hslToHex(Math.round(((db.categories.length + db.destinations.length + db.accounts.length + db.pockets.length) * 137.508) % 360), 62, 46);
   }
 
   function periodLabel() {
@@ -770,9 +846,20 @@
     return T('{a} su {l} · {p}%', { a: money(it.amount), l: money(it.limit), p: pct });
   }
 
+  // Movimenti del periodo che compongono una categoria di spesa (stessi criteri dei totali).
+  function catTxList(id) {
+    var txs = sortedTx(db.transactions.filter(function (t) {
+      if (!inPeriod(t)) { return false; }
+      return flowParts(t).some(function (p) { return p.k === 'expense' && p.key === id; });
+    }));
+    if (!txs.length) { return ''; }
+    return '<div class="tx-group cat-tx" role="region" aria-label="' + esc(T('Movimenti della categoria')) + '">' +
+      txs.map(function (t) { return txRow(t, true); }).join('') + '</div>';
+  }
+
   function catRow(it, total, showLimit) {
     var pct = total ? Math.round(it.amount * 100 / total) : 0;
-    var s = '<button type="button" class="cat-row' + (ui.selected === it.id ? ' selected' : '') + '" data-action="sel-cat" data-ref="' + esc(it.id) + '">' +
+    var s = '<button type="button" class="cat-row' + (ui.selected === it.id ? ' selected' : '') + '" data-action="sel-cat" data-ref="' + esc(it.id) + '" aria-expanded="' + (ui.selected === it.id) + '">' +
       '<span class="row-top"><span class="chip" style=\"background:' + tc(it.color) + ';color:' + textOn(tc(it.color)) + '">' + esc(it.icon) + '</span>' +
       '<span class="row-name">' + esc(it.name) + '</span>' +
       '<span class="row-amt">' + money(it.amount) + '<small>' + pct + '%</small></span></span>';
@@ -911,7 +998,10 @@
 
     if (c.expItems.length) {
       out += '<div class="cat-list">';
-      c.expItems.forEach(function (it) { out += catRow(it, c.expense, ui.mode === 'month'); });
+      c.expItems.forEach(function (it) {
+        out += catRow(it, c.expense, ui.mode === 'month');
+        if (ui.selected === it.id) { out += catTxList(it.id); }
+      });
       out += '</div>';
     } else {
       out += '<p class="empty">' + T('Usa “− Spesa” per registrare la prima spesa.') + '</p>';
@@ -940,14 +1030,18 @@
     return q ? q.split(/\s+/) : [];
   }
 
+  // Quanto ogni movimento ha preso dal conto perche il salvadanaio non bastava. Ricalcolato a ogni render().
+  var shortMap = {};
+
   function txRow(t, showDate) {
     var ref = findRef(t.refId, t.type) || NONE_REF;
     var sign = t.type === 'expense' ? '−' : t.type === 'income' ? '+' : '→';
     var from = srcLabel(t);
     var sub = (showDate ? fmtDate(t.date) + ' · ' : '') + (t.note || typeLabel(t.type)) + (from ? ' · ' + from : '');
+    var warn = shortMap[t.id] ? '<small class="tx-warn">' + esc(T('⚠️ Salvadanaio “{n}” non sufficiente a coprire la spesa: {m} presi dal conto.', { n: walletName(srcOf(t)), m: money(shortMap[t.id]) })) + '</small>' : '';
     return '<button type="button" class="tx-row" data-action="edit-tx" data-id="' + esc(t.id) + '">' +
       '<span class="chip" style=\"background:' + tc(ref.color) + ';color:' + textOn(tc(ref.color)) + '">' + esc(ref.icon) + '</span>' +
-      '<span class="tx-main"><b>' + esc(nm(ref)) + '</b><small>' + esc(sub) + '</small></span>' +
+      '<span class="tx-main"><b>' + esc(nm(ref)) + '</b><small>' + esc(sub) + '</small>' + warn + '</span>' +
       '<span class="tx-amt ' + t.type + '">' + sign + ' ' + money(t.amount) + '</span></button>';
   }
 
@@ -1037,9 +1131,10 @@
 
   function balCell(n) { return '<span class="bal' + (n < 0 ? ' neg' : '') + '">' + money(n) + '</span>'; }
 
-  function wealthRow(ref, bal, flows, attrs) {
-    var sub = (bal.balance < 0 ? '⚠️ ' + T('In negativo') + ' · ' : '') + flows;
-    return '<button type="button" class="item-row" ' + attrs + '>' +
+  function wealthRow(ref, bal, flows, attrs, cls) {
+    var neg = bal.warn !== undefined ? bal.warn : bal.balance < 0;
+    var sub = (neg ? '⚠️ ' + T('In negativo') + ' · ' : '') + flows;
+    return '<button type="button" class="item-row' + (cls ? ' ' + cls : '') + '" ' + attrs + '>' +
       '<span class="chip" style=\"background:' + tc(ref.color) + ';color:' + textOn(tc(ref.color)) + '">' + esc(ref.icon) + '</span>' +
       '<span class="grow"><b>' + esc(nm(ref)) + '</b><small>' + esc(sub) + '</small></span>' +
       balCell(bal.balance) + '<span class="chev" aria-hidden="true">›</span></button>';
@@ -1047,16 +1142,28 @@
 
   // Tab Sintesi Patrimonio: stato di conto e fondi su tutto lo storico, non sul periodo scelto.
   function renderWealth() {
-    var b = balances(), total = 0, funds = 0;
-    Object.keys(b).forEach(function (k) { total += b[k].balance; if (findFund(k)) { funds += b[k].balance; } });
+    var b = balances(), total = 0, funds = 0, pk = 0;
+    Object.keys(b).forEach(function (k) { total += b[k].balance; if (findFund(k)) { funds += b[k].balance; } if (findPocket(k)) { pk += b[k].balance; } });
     var out = '<h2 class="section-title">' + T('Sintesi Patrimonio') + '</h2>' +
       '<section class="hero" aria-label="' + T('Sintesi Patrimonio') + '">' +
       '<div class="hero-main"><span class="lbl">' + T('Patrimonio totale') + '</span><strong class="big' + (total < 0 ? ' neg' : '') + '">' + money(total) + '</strong><span class="hint">' + T('Conto più fondi. I trasferimenti non lo cambiano.') + '</span>' +
-      '<div class="hero-pill"><span>' + T('Nei fondi e risparmi') + '</span><strong' + (funds < 0 ? ' class="neg"' : '') + '>' + money(funds) + '</strong></div></div></section>';
+      '<div class="hero-pill"><span>' + T('Nei fondi e risparmi') + '</span><strong' + (funds < 0 ? ' class="neg"' : '') + '>' + money(funds) + '</strong></div>' +
+      (db.pockets.length ? '<div class="hero-pill"><span>' + T('Nei salvadanai') + '</span><strong' + (pk < 0 ? ' class="neg"' : '') + '>' + money(pk) + '</strong></div>' : '') +
+      '</div></section>';
     out += '<h2 class="section-title">' + T('Conti') + '</h2><div class="list-card">';
     db.accounts.forEach(function (a) {
-      var s = b[a.id];
-      out += wealthRow(a, s, T('Entrate {a} · Uscite {b}', { a: money(s.inn), b: money(s.out) }), 'data-action="edit-account" data-id="' + esc(a.id) + '"');
+      var s = b[a.id], ps = pocketsOf(a.id);
+      if (!ps.length) {
+        out += wealthRow(a, s, T('Entrate {a} · Uscite {b}', { a: money(s.inn), b: money(s.out) }), 'data-action="edit-account" data-id="' + esc(a.id) + '"');
+      } else {
+        var av = availOf(a.id, b), tot = totalOf(a.id, b);
+        out += wealthRow(a, { balance: tot, warn: av < 0 }, T('Disponibile {a} · Salvadanai {b}', { a: money(av), b: money(tot - s.balance) }), 'data-action="edit-account" data-id="' + esc(a.id) + '"');
+        ps.forEach(function (p) {
+          var q = b[p.id];
+          out += wealthRow(p, q, T('Entrate {a} · Uscite {b}', { a: money(q.inn), b: money(q.out) }), 'data-action="edit-cat" data-kind="pocket" data-id="' + esc(p.id) + '"', 'pocket-row');
+        });
+      }
+      out += '<button type="button" class="add-btn pocket-add" data-action="add-cat" data-kind="pocket" data-acc="' + esc(a.id) + '">' + T('+ Aggiungi salvadanaio') + '</button>';
     });
     out += '<button type="button" class="add-btn" data-action="add-cat" data-kind="account">' + T('+ Aggiungi conto') + '</button></div>';
     out += '<h2 class="section-title">' + T('Fondi e risparmi') + '</h2><div class="list-card">';
@@ -1136,6 +1243,7 @@
     if (db.settings.lang !== lang) { setLang(db.settings.lang); }
     applyChrome();
     applyTheme();
+    shortMap = {}; balances(shortMap);
     var html = ui.tab === 'home' ? renderHome() : ui.tab === 'list' ? renderList() : ui.tab === 'wealth' ? renderWealth() : ui.tab === 'cats' ? renderCats() : renderSettings();
     $('#view').innerHTML = html;
     $('#view').setAttribute('data-tab', ui.tab);
@@ -1150,7 +1258,11 @@
 
   // Conti e fondi scelti per il movimento. Spese: i conti e i fondi usabili. Entrate e trasferimenti: tutti.
   function walletOptions(type, cur) {
-    var list = db.accounts.map(function (a) { return { id: a.id, ref: a }; });
+    var list = [];
+    db.accounts.forEach(function (a) {
+      list.push({ id: a.id, ref: a });
+      pocketsOf(a.id).forEach(function (p) { list.push({ id: p.id, ref: p, acc: a }); });
+    });
     db.destinations.forEach(function (d) {
       if (type !== 'expense' || d.spendable || d.id === cur) { list.push({ id: d.id, ref: d }); }
     });
@@ -1166,7 +1278,7 @@
 
   function existingWallet(tx) {
     var id = tx.type === 'income' ? dstOf(tx) : srcOf(tx);
-    return findAccount(id) || findFund(id) ? id : db.accounts[0].id;
+    return findAccount(id) || findPocket(id) || findFund(id) ? id : db.accounts[0].id;
   }
 
   function openEntry(type, tx) {
@@ -1266,10 +1378,10 @@
     var title = T(entry.type === 'income' ? 'Versato su' : entry.type === 'saving' ? 'Da' : 'Pagato da');
     var h = '<div class="grid-title">' + title + '</div><div class="src-row" role="group" aria-label="' + title + '">';
     opts.forEach(function (o) {
-      var bal = b[o.id] ? b[o.id].balance : 0, on = entry.wal === o.id;
+      var bal = levelOf(o.id, b), on = entry.wal === o.id;
       h += '<button type="button" class="src-chip' + (on ? ' on' : '') + '" data-action="pick-src" data-src="' + esc(o.id) + '" aria-pressed="' + on + '">' +
         '<span class="si" style=\"background:' + tc(o.ref.color) + ';color:' + textOn(tc(o.ref.color)) + '">' + esc(o.ref.icon) + '</span>' +
-        '<span class="st"><span class="sn">' + esc(nm(o.ref)) + '</span><small class="' + (bal < 0 ? 'neg' : '') + '">' + money(bal) + '</small></span></button>';
+        '<span class="st"><span class="sn">' + esc(nm(o.ref)) + '</span>' + (o.acc ? '<small class="sa">' + esc(nm(o.acc)) + '</small>' : '') + '<small class="' + (bal < 0 ? 'neg' : '') + '">' + money(bal) + '</small></span></button>';
     });
     return h + '</div>';
   }
@@ -1318,11 +1430,18 @@
     }
     var wasEdit = entry.mode === 'edit';
     // Un fondo o il conto che passa sotto zero con questo movimento: avviso, ma il movimento resta.
-    var after = balances(), negMsg = null;
-    var from = srcOf(tx);
-    if (tx.type !== 'income' && before[from] && after[from].balance < 0 && before[from].balance >= 0) {
-      negMsg = T('⚠️ {name}: saldo in negativo ({b}).', { name: walletName(from), b: money(after[from].balance) });
+    var sf = {}, after = balances(sf), negMsg = null, shortMsg = null;
+    var from = srcOf(tx), negs = [];
+    if (tx.type !== 'income' && before[from]) {
+      var chk = [from], pf = findPocket(from);
+      if (pf) { chk.push(pf.accountId); }
+      chk.forEach(function (id) {
+        var lb = levelOf(id, before), la = levelOf(id, after);
+        if (la < 0 && lb >= 0) { negs.push(T('⚠️ {name}: saldo in negativo ({b}).', { name: walletName(id), b: money(la) })); }
+      });
+      if (negs.length) { negMsg = negs.join(' '); }
     }
+    if (sf[tx.id]) { shortMsg = T('⚠️ Credito del salvadanaio insufficiente: {m} presi dal conto.', { m: money(sf[tx.id]) }); }
     db.settings.lastWallet[tx.type] = entry.wal;
     var saved = save();
     ui.year = +tx.date.slice(0, 4);
@@ -1331,8 +1450,9 @@
     closeSheet();
     render();
     if (alertInfo) { toast(alertInfo.text, alertInfo.level); }
+    if (shortMsg) { toast(shortMsg, 'warn'); }
     if (negMsg) { toast(negMsg, 'warn'); }
-    if (!alertInfo && !negMsg && (saved || memoryOnly)) { toast(wasEdit ? T('Modifica salvata: {m}', { m: money(cents) }) : T(ADDED[tx.type], { m: money(cents) }), 'ok'); }
+    if (!alertInfo && !negMsg && !shortMsg && (saved || memoryOnly)) { toast(wasEdit ? T('Modifica salvata: {m}', { m: money(cents) }) : T(ADDED[tx.type], { m: money(cents) }), 'ok'); }
   }
 
   // Un foglio aperto: blocca lo sfondo, ricorda dove era il focus, aggiunge una voce di cronologia
@@ -1422,18 +1542,20 @@
     if (inp && inp.value !== editor.color) { inp.value = editor.color; }
   }
 
-  function openEditor(kind, id) {
+  function openEditor(kind, id, accId) {
     sheetOpened();
     var ex = null;
     if (kind === 'account') { ex = id ? findAccount(id) : null; }
+    else if (kind === 'pocket') { ex = id ? findPocket(id) : null; }
     else if (id) { ex = kind === 'saving' ? findRef(id, 'saving') : findRef(id, kind); }
     editor = {
       kind: kind, id: id || null,
+      acc: ex && kind === 'pocket' ? ex.accountId : (accId || ''),
       color: ex ? ex.color : nextColor(),
-      icon: ex ? ex.icon : (kind === 'account' ? '💳' : EMOJIS[0])
+      icon: ex ? ex.icon : (kind === 'account' ? '💳' : kind === 'pocket' ? '🐷' : EMOJIS[0])
     };
     var h = '<div class="sheet-backdrop" data-action="close-sheet"></div><div class="sheet" role="dialog" aria-modal="true" aria-label="' + T('Editor') + '" tabindex="-1">' +
-      '<div class="sheet-grip"></div><div class="sheet-head"><strong>' + T(kind === 'account' ? (ex ? 'Modifica conto' : 'Nuovo conto') : (ex ? 'Modifica ' : 'Nuova ') + (kind === 'saving' ? 'destinazione' : 'categoria')) + '</strong>' +
+      '<div class="sheet-grip"></div><div class="sheet-head"><strong>' + T(kind === 'account' ? (ex ? 'Modifica conto' : 'Nuovo conto') : kind === 'pocket' ? (ex ? 'Modifica salvadanaio' : 'Nuovo salvadanaio') : (ex ? 'Modifica ' : 'Nuova ') + (kind === 'saving' ? 'destinazione' : 'categoria')) + '</strong>' +
       '<button type="button" class="icon-btn" data-action="close-sheet" aria-label="' + T('Chiudi') + '">✕</button></div>' +
       '<label class="field-label" for="ed-name">' + T('Nome') + '</label><input class="field-input" id="ed-name" type="text" maxlength="30" value="' + esc(ex ? nm(ex) : '') + '" autocomplete="off">' +
       '<label class="field-label" for="ed-icon">' + T('Icona o emoji') + '</label><input class="field-input" id="ed-icon" type="text" maxlength="8" value="' + esc(editor.icon) + '" autocomplete="off">' +
@@ -1452,6 +1574,10 @@
       h += '<label class="field-label" for="ed-opening">' + T('Saldo iniziale in euro (facoltativo)') + '</label><input class="field-input" id="ed-opening" type="text" inputmode="decimal" placeholder="0" value="' + (ex && ex.opening ? signedStr(ex.opening) : '') + '" autocomplete="off">' +
         '<label class="field-label" for="ed-opening-date">' + T('Data del saldo iniziale (facoltativa)') + '</label><input class="field-input" id="ed-opening-date" type="date" value="' + (ex ? (ex.openingDate || '') : todayISO()) + '">' +
         '<p class="hint">' + T('Le entrate e le uscite fino a questa data (inclusa) sono già nel saldo e non vengono contate.') + '</p>';
+    }
+    if (kind === 'pocket') {
+      h += '<label class="field-label" for="ed-opening">' + T('Saldo iniziale del salvadanaio in euro (facoltativo)') + '</label><input class="field-input" id="ed-opening" type="text" inputmode="decimal" placeholder="0" value="' + (ex && ex.opening ? signedStr(ex.opening) : '') + '" autocomplete="off">' +
+        '<p class="hint">' + T('Parte del saldo del conto messa da parte. Resta liquidità e fa parte del conto, ma non è nel disponibile. Non va sotto zero: se non basta, il resto esce dal conto. Vale la data del saldo iniziale del conto.') + '</p>';
     }
     if (kind === 'saving') {
       h += '<label class="check-row"><input type="checkbox" id="ed-spend"' + (!ex || ex.spendable ? ' checked' : '') + '><span>' + T('Usabile per pagare spese') + '</span></label>';
@@ -1476,9 +1602,10 @@
       if (limit !== null && isNaN(limit)) { err.textContent = T('Il limite non è un importo valido.'); return; }
     }
     var opening = 0;
-    if (editor.kind === 'saving' || editor.kind === 'account') {
+    if (editor.kind === 'saving' || editor.kind === 'account' || editor.kind === 'pocket') {
       opening = parseOpening($('#ed-opening').value);
       if (isNaN(opening)) { err.textContent = T('Il saldo iniziale non è valido.'); return; }
+      if (editor.kind === 'pocket' && opening < 0) { err.textContent = T('Il saldo del salvadanaio non può essere negativo.'); return; }
     }
     var odate = '';
     if (editor.kind === 'saving' || editor.kind === 'account') {
@@ -1489,6 +1616,10 @@
       var a = editor.id ? findAccount(editor.id) : null;
       if (a) { a.name = name; a.icon = icon; a.color = editor.color; a.opening = opening; a.openingDate = odate; }
       else { db.accounts.push({ id: uid(), name: name, icon: icon, color: editor.color, opening: opening, openingDate: odate }); }
+    } else if (editor.kind === 'pocket') {
+      var pk = editor.id ? findPocket(editor.id) : null;
+      if (pk) { pk.name = name; pk.icon = icon; pk.color = editor.color; pk.opening = opening; }
+      else { db.pockets.push({ id: uid(), accountId: editor.acc || db.accounts[0].id, name: name, icon: icon, color: editor.color, opening: opening }); }
     } else if (editor.kind === 'saving') {
       var spend = $('#ed-spend').checked;
       var d = editor.id ? findRef(editor.id, 'saving') : null;
@@ -1509,10 +1640,12 @@
     if (!editor || !editor.id) { return; }
     var id = editor.id, kind = editor.kind;
     var wal = kind === 'saving' || kind === 'account';
-    var ref = kind === 'account' ? findAccount(id) : kind === 'saving' ? findRef(id, 'saving') : findRef(id, kind);
+    var ref = kind === 'account' ? findAccount(id) : kind === 'pocket' ? findPocket(id) : kind === 'saving' ? findRef(id, 'saving') : findRef(id, kind);
     if (kind === 'account' && db.accounts.length < 2) { return; }
+    if (kind === 'pocket') { deletePocket(id); return; }
     var used = db.transactions.filter(function (t) { return t.refId === id || (wal && (t.src === id || t.dst === id)); }).length;
     var msg = T('Eliminare “{n}”?', { n: ref ? nm(ref) : '' });
+    if (kind === 'account' && pocketsOf(id).length) { msg += T(' Verranno eliminati anche i suoi {n} salvadanai.', { n: pocketsOf(id).length }); }
     if (used) {
       msg += wal ? (used === 1 ? T(' Il movimento collegato non incide più sui saldi.') : T(' I {u} movimenti collegati non incidono più sui saldi.', { u: used }))
         : (used === 1 ? T(' Il movimento collegato resta, ma senza categoria.') : T(' I {u} movimenti collegati restano, ma senza categoria.', { u: used }));
@@ -1522,9 +1655,34 @@
       if (bb && bb.balance !== 0) { msg += ' ' + T('Il saldo di “{n}” ({b}) non verrà più conteggiato nel patrimonio.', { n: ref ? nm(ref) : '', b: money(bb.balance) }); }
     }
     if (!window.confirm(msg)) { return; }
-    if (kind === 'account') { db.accounts = db.accounts.filter(function (a) { return a.id !== id; }); }
+    if (kind === 'account') {
+      db.accounts = db.accounts.filter(function (a) { return a.id !== id; });
+      db.pockets = db.pockets.filter(function (p) { return p.accountId !== id; });
+    }
     else if (kind === 'saving') { db.destinations = db.destinations.filter(function (d) { return d.id !== id; }); }
     else { db.categories = db.categories.filter(function (c) { return c.id !== id; }); }
+    save();
+    closeSheet();
+    render();
+    toast(T('Eliminata.'), 'info');
+  }
+
+  // Elimina un salvadanaio senza perdere patrimonio: saldo e movimenti rientrano nel conto.
+  function deletePocket(id) {
+    var p = findPocket(id), acc = p ? findAccount(p.accountId) : null;
+    if (!p || !acc) { return; }
+    var bal = balances()[id].balance;
+    var msg = T('Eliminare “{n}”?', { n: nm(p) }) + T(' Il saldo del salvadanaio ({b}) torna nel conto e i movimenti passano al conto.', { b: money(bal) });
+    if (!window.confirm(msg)) { return; }
+    db.transactions.forEach(function (t) {
+      if (t.src === id) { t.src = acc.id; }
+      if (t.dst === id) { t.dst = acc.id; }
+      if (t.type === 'saving' && t.refId === id) { t.refId = acc.id; }
+    });
+    // Spostamenti conto -> conto stesso: non servono piu.
+    db.transactions = db.transactions.filter(function (t) { return !(t.type === 'saving' && t.refId === acc.id && srcOf(t) === acc.id); });
+    acc.opening += p.opening;
+    db.pockets = db.pockets.filter(function (q) { return q.id !== id; });
     save();
     closeSheet();
     render();
@@ -1558,7 +1716,7 @@
     db.settings.lastBackup = todayISO();
     db.settings.backupSnooze = '';
     save();
-    var payload = JSON.stringify({ app: 'SPET', exportedAt: new Date().toISOString(), version: db.version, settings: db.settings, accounts: db.accounts, categories: db.categories, destinations: db.destinations, transactions: db.transactions }, null, 2);
+    var payload = JSON.stringify({ app: 'SPET', exportedAt: new Date().toISOString(), version: db.version, settings: db.settings, accounts: db.accounts, pockets: db.pockets, categories: db.categories, destinations: db.destinations, transactions: db.transactions }, null, 2);
     download('spet-backup-' + stamp() + '.json', payload, 'application/json');
     render();
     toast(T('Backup pronto.'), 'ok');
@@ -1675,7 +1833,7 @@
       case 'save-edit': if (entry) { commitEntry(); } break;
       case 'delete-tx': deleteTx(); break;
       case 'close-sheet': closeSheet(); break;
-      case 'add-cat': openEditor(el.getAttribute('data-kind'), null); break;
+      case 'add-cat': openEditor(el.getAttribute('data-kind'), null, el.getAttribute('data-acc') || ''); break;
       case 'edit-cat': openEditor(el.getAttribute('data-kind'), el.getAttribute('data-id')); break;
       case 'emoji-pick': $('#ed-icon').value = el.getAttribute('data-e'); break;
       case 'color-pick':
