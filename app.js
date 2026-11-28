@@ -170,6 +170,7 @@
     'Salvadanaio': 'Piggy bank', 'Disponibile {a} · Salvadanai {b}': 'Available {a} · Piggy banks {b}',
     'Nei salvadanai': 'In piggy banks',
     'Parte del saldo del conto messa da parte. Resta liquidità e fa parte del conto, ma non è nel disponibile. Non va sotto zero: se non basta, il resto esce dal conto. Vale la data del saldo iniziale del conto.': 'Part of the account balance set aside. It stays liquid cash inside the account but is not in the available amount. It never goes below zero: if it is not enough, the rest comes out of the account. The account opening date applies.',
+    '⚠️ Salvadanaio “{n}” non sufficiente a coprire la spesa: {m} presi dal conto.': '⚠️ Piggy bank “{n}” not enough to cover the payment: {m} taken from the account.',
     '⚠️ Credito del salvadanaio insufficiente: {m} presi dal conto.': '⚠️ Not enough credit in the piggy bank: {m} taken from the account.',
     'Il saldo del salvadanaio non può essere negativo.': 'The piggy bank balance cannot be negative.',
     'Saldo iniziale del salvadanaio in euro (facoltativo)': 'Piggy bank opening balance in euro (optional)',
@@ -1014,14 +1015,18 @@
     return q ? q.split(/\s+/) : [];
   }
 
+  // Quanto ogni movimento ha preso dal conto perche il salvadanaio non bastava. Ricalcolato a ogni render().
+  var shortMap = {};
+
   function txRow(t, showDate) {
     var ref = findRef(t.refId, t.type) || NONE_REF;
     var sign = t.type === 'expense' ? '−' : t.type === 'income' ? '+' : '→';
     var from = srcLabel(t);
     var sub = (showDate ? fmtDate(t.date) + ' · ' : '') + (t.note || typeLabel(t.type)) + (from ? ' · ' + from : '');
+    var warn = shortMap[t.id] ? '<small class="tx-warn">' + esc(T('⚠️ Salvadanaio “{n}” non sufficiente a coprire la spesa: {m} presi dal conto.', { n: walletName(srcOf(t)), m: money(shortMap[t.id]) })) + '</small>' : '';
     return '<button type="button" class="tx-row" data-action="edit-tx" data-id="' + esc(t.id) + '">' +
       '<span class="chip" style=\"background:' + tc(ref.color) + ';color:' + textOn(tc(ref.color)) + '">' + esc(ref.icon) + '</span>' +
-      '<span class="tx-main"><b>' + esc(nm(ref)) + '</b><small>' + esc(sub) + '</small></span>' +
+      '<span class="tx-main"><b>' + esc(nm(ref)) + '</b><small>' + esc(sub) + '</small>' + warn + '</span>' +
       '<span class="tx-amt ' + t.type + '">' + sign + ' ' + money(t.amount) + '</span></button>';
   }
 
@@ -1223,6 +1228,7 @@
     if (db.settings.lang !== lang) { setLang(db.settings.lang); }
     applyChrome();
     applyTheme();
+    shortMap = {}; balances(shortMap);
     var html = ui.tab === 'home' ? renderHome() : ui.tab === 'list' ? renderList() : ui.tab === 'wealth' ? renderWealth() : ui.tab === 'cats' ? renderCats() : renderSettings();
     $('#view').innerHTML = html;
     $('#view').setAttribute('data-tab', ui.tab);
