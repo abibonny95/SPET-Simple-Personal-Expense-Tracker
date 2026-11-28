@@ -1,4 +1,4 @@
-/* SPET 1.5.0 - stile mobile first, tema chiaro e scuro */
+/* SPET 1.6.0 - stile mobile first, tema chiaro e scuro */
 
 /* tokens:start */
 :root {
@@ -1065,3 +1065,9 @@ body.no-actions #view { padding-bottom: calc(var(--tab-h) + var(--safe-b) + 24px
 .act.expense { background: linear-gradient(160deg, var(--btn-expense), color-mix(in srgb, var(--btn-expense) 72%, #000)); }
 .act.saving { background: linear-gradient(160deg, var(--btn-saving), color-mix(in srgb, var(--btn-saving) 72%, #000)); }
 .act::before { content: ""; position: absolute; z-index: -1; right: -26px; top: -26px; width: 86px; height: 86px; opacity: .10; pointer-events: none; background: var(--wm) center / contain no-repeat; }
+
+/* v1.6: salvadanai dentro i conti */
+.item-row.pocket-row { padding-left: 34px; position: relative; }
+.item-row.pocket-row::before { content: ""; position: absolute; left: 20px; top: 0; bottom: 50%; width: 10px; border-left: 2px solid var(--card-border); border-bottom: 2px solid var(--card-border); border-bottom-left-radius: 8px; }
+.add-btn.pocket-add { min-height: 40px; font-size: 14px; padding-left: 34px; text-align: left; opacity: .85; }
+.src-chip .st .sa { display: block; color: var(--text-muted); font-size: 11px; }

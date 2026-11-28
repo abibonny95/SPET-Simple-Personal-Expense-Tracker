@@ -2,7 +2,7 @@
  * Cache versionata. Ad ogni rilascio incrementa CACHE_VERSION,
  * cosi gli utenti ricevono i file nuovi e la cache vecchia viene cancellata. */
 
-var CACHE_VERSION = 10;
+var CACHE_VERSION = 11;
 var CACHE_NAME = 'spet-v' + CACHE_VERSION;
 
 var ASSETS = [
